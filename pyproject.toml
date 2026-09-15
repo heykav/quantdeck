@@ -1,0 +1,42 @@
+[project]
+name = "quantdeck"
+version = "0.1.0"
+description = "A simple, event-driven backtesting framework for algorithmic trading strategies."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "heykav" }]
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "pydantic>=2.0",
+    "typer>=0.9",
+    "rich>=13.0",
+    "yfinance>=0.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "ruff>=0.4", "mypy>=1.8"]
+
+[project.scripts]
+quantdeck = "quantdeck.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/heykav/quantdeck"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quantdeck"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
