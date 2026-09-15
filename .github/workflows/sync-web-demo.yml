@@ -1,0 +1,53 @@
+name: sync web demo source
+
+# The browser demo (docs/) runs the real quantdeck engine via Pyodide - not
+# a JS reimplementation, per the demo page's own claim. That claim is only
+# true if docs/quantdeck_src never drifts from src/quantdeck. This copies
+# the pure-Python engine (no pandas/yfinance, which the demo doesn't need -
+# it loads bundled CSVs with the stdlib csv module instead) into
+# docs/quantdeck_src on every push that touches it, and commits only if
+# something actually changed.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/quantdeck/**"
+      - "examples/sma_crossover.py"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy engine source into docs/quantdeck_src
+        run: |
+          rm -rf docs/quantdeck_src/quantdeck
+          mkdir -p docs/quantdeck_src/quantdeck/broker docs/quantdeck_src/quantdeck/data
+          cp src/quantdeck/__init__.py docs/quantdeck_src/quantdeck/__init__.py
+          cp src/quantdeck/models.py docs/quantdeck_src/quantdeck/models.py
+          cp src/quantdeck/strategy.py docs/quantdeck_src/quantdeck/strategy.py
+          cp src/quantdeck/engine.py docs/quantdeck_src/quantdeck/engine.py
+          cp src/quantdeck/metrics.py docs/quantdeck_src/quantdeck/metrics.py
+          cp src/quantdeck/broker/__init__.py docs/quantdeck_src/quantdeck/broker/__init__.py
+          cp src/quantdeck/broker/base.py docs/quantdeck_src/quantdeck/broker/base.py
+          cp src/quantdeck/broker/paper.py docs/quantdeck_src/quantdeck/broker/paper.py
+          cp src/quantdeck/data/__init__.py docs/quantdeck_src/quantdeck/data/__init__.py
+          cp src/quantdeck/data/base.py docs/quantdeck_src/quantdeck/data/base.py
+          cp examples/sma_crossover.py docs/quantdeck_src/sma_crossover.py
+
+      - name: Commit if anything changed
+        run: |
+          if git diff --quiet -- docs/quantdeck_src; then
+            echo "web demo source already in sync"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/quantdeck_src
+          git commit -m "chore: sync web demo source with src/quantdeck" -m "Automated by .github/workflows/sync-web-demo.yml"
+          git push

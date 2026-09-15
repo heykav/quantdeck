@@ -2,7 +2,19 @@
 
 A simple, event-driven backtesting framework for algorithmic trading strategies — zero-config, real market data out of the box, no database server required.
 
+<p>
+  <a href="https://heykav.github.io/quantdeck/"><img src="https://img.shields.io/badge/Open%20the%20live%20web%20demo-QuantDeck-3AA0FF?style=for-the-badge&labelColor=0d0e12" alt="Open the live QuantDeck web demo"></a>
+  &nbsp;&nbsp;
+  <a href="#installation"><img src="https://img.shields.io/badge/Run%20locally-pip%20install%20and%20run-161715?style=for-the-badge&labelColor=0d0e12" alt="Run QuantDeck locally"></a>
+  &nbsp;&nbsp;
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-161715?style=for-the-badge&labelColor=0d0e12" alt="View the MIT license"></a>
+</p>
+
+No install needed to try it — the [live demo](https://heykav.github.io/quantdeck/) runs the real Python engine client-side via [Pyodide](https://pyodide.org) (Python compiled to WASM), not a JS reimplementation. `docs/quantdeck_src` is kept in sync with `src/quantdeck` automatically (`.github/workflows/sync-web-demo.yml`), so that claim can't quietly go stale.
+
 QuantDeck was built as a modern alternative to older frameworks like [LiuAlgoTrader](https://github.com/amor71/LiuAlgoTrader): no Postgres setup, no ceremony — write a strategy class, run one command, and see real results against real historical data in seconds.
+
+![Equity curve](screenshots/equity_curve.png)
 
 > **New to trading or Python?** This README is written for you too — skip straight to [What is this, actually?](#what-is-this-actually) below.
 
@@ -10,6 +22,7 @@ QuantDeck was built as a modern alternative to older frameworks like [LiuAlgoTra
 
 ## Table of contents
 
+- [Live demo](#live-demo)
 - [What is this, actually?](#what-is-this-actually)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
@@ -24,6 +37,16 @@ QuantDeck was built as a modern alternative to older frameworks like [LiuAlgoTra
 - [Roadmap](#roadmap)
 - [Important disclaimer](#important-disclaimer)
 - [License](#license)
+
+---
+
+## Live demo
+
+**[heykav.github.io/quantdeck](https://heykav.github.io/quantdeck/)** — pick a symbol and SMA windows, click "Run backtest," and watch the real engine run in your browser (no install, no server, nothing sent anywhere). Every trade is logged too:
+
+![Trade log](screenshots/trade_log.png)
+
+The demo uses a handful of bundled historical datasets (2015–2024) so it works instantly with no live network fetch — the same `BacktestEngine`, `Strategy`, and metrics code as the CLI, just fed pre-downloaded prices instead of a live `yfinance` call.
 
 ---
 

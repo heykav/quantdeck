@@ -9,7 +9,6 @@ authors = [{ name = "heykav" }]
 dependencies = [
     "pandas>=2.0",
     "numpy>=1.24",
-    "pydantic>=2.0",
     "typer>=0.9",
     "rich>=13.0",
     "yfinance>=0.2",
@@ -34,6 +33,7 @@ packages = ["src/quantdeck"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+extend-exclude = ["docs"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]

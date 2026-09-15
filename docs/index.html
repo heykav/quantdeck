@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuantDeck — event-driven backtesting, live in your browser</title>
+<meta name="description" content="A simple, event-driven backtesting framework for algorithmic trading. Run a real SMA crossover strategy against real historical stock data, live in your browser via Pyodide." />
+<meta name="keywords" content="algorithmic trading, backtesting, trading strategy, SMA crossover, Python, Pyodide, quantitative finance, stock trading, event-driven backtester" />
+<meta name="author" content="Krishna Anubhav" />
+<meta name="robots" content="index, follow, max-image-preview:large" />
+<link rel="canonical" href="https://heykav.github.io/quantdeck/" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://heykav.github.io/quantdeck/" />
+<meta property="og:title" content="QuantDeck — event-driven backtesting, live in your browser" />
+<meta property="og:description" content="A simple, event-driven backtesting framework for algorithmic trading, running client-side via Pyodide — no server, no API key, real historical data." />
+<meta property="og:image" content="https://heykav.github.io/quantdeck/og-image.png" />
+<meta property="og:image:width" content="1280" />
+<meta property="og:image:height" content="800" />
+<meta property="og:site_name" content="QuantDeck" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="QuantDeck — event-driven backtesting, live in your browser" />
+<meta name="twitter:description" content="A simple, event-driven backtesting framework for algorithmic trading, running client-side via Pyodide." />
+<meta name="twitter:image" content="https://heykav.github.io/quantdeck/og-image.png" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='84'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"QuantDeck","applicationCategory":"FinanceApplication","operatingSystem":"Web Browser (Pyodide/WASM)","url":"https://heykav.github.io/quantdeck/","description":"A simple, event-driven backtesting framework for algorithmic trading, running live in your browser via Pyodide.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Event-driven backtest engine","SMA crossover example strategy","Real historical market data","Performance metrics: return, CAGR, Sharpe, drawdown, win rate"],"author":{"@type":"Person","name":"Krishna Anubhav","url":"https://github.com/heykav"},"codeRepository":"https://github.com/heykav/quantdeck"}
+</script>
+<!-- frame-ancestors and X-Frame-Options can't be set via <meta> - only a
+     real HTTP response header - and GitHub Pages doesn't let a static
+     site add custom response headers, so that protection genuinely isn't
+     available here rather than silently pretended at. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'" />
+<link rel="stylesheet" href="styles.css" />
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
+        integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
+        crossorigin="anonymous"></script>
+</head>
+<body>
+
+<header>
+  <h1><span>QuantDeck</span> — live in your browser</h1>
+  <p>The real Python backtest engine (event-driven, next-bar-open fills, real historical prices)
+     running client-side via
+     <a href="https://pyodide.org" target="_blank" rel="noopener">Pyodide</a> — the exact same
+     code as the CLI and the test suite, not a JS reimplementation.
+     No server, no API key, nothing leaves your machine.
+     <a href="https://github.com/heykav/quantdeck" target="_blank" rel="noopener">Source →</a>
+  </p>
+</header>
+
+<div class="layout">
+  <div class="panel" id="controls">
+    <div class="section-label">Backtest parameters</div>
+
+    <label for="symbol">Symbol</label>
+    <select id="symbol">
+      <option value="AAPL" selected>AAPL — Apple</option>
+      <option value="MSFT">MSFT — Microsoft</option>
+      <option value="GOOGL">GOOGL — Alphabet</option>
+      <option value="TSLA">TSLA — Tesla</option>
+      <option value="NVDA">NVDA — Nvidia</option>
+      <option value="SPY">SPY — S&amp;P 500 ETF</option>
+    </select>
+    <div class="field-hint">Bundled daily prices, 2015–2024, so the demo works offline with no live data fetch.</div>
+
+    <label for="fastWindow">Fast SMA window (days)</label>
+    <input id="fastWindow" type="number" value="10" step="1" min="1" max="200" required />
+
+    <label for="slowWindow">Slow SMA window (days)</label>
+    <input id="slowWindow" type="number" value="30" step="1" min="2" max="400" required />
+
+    <label for="cash">Starting cash ($)</label>
+    <input id="cash" type="number" value="100000" step="1000" min="100" max="100000000" required />
+
+    <button id="run" disabled>Loading Python runtime…</button>
+    <div id="status" role="status" aria-live="polite">Downloading Pyodide (~7MB, one time)…</div>
+
+    <div class="section-label">Summary</div>
+    <table id="summary"><tbody></tbody></table>
+  </div>
+
+  <div class="panel" id="results">
+    <div class="tabs" role="tablist">
+      <button data-tab="equity" class="active" role="tab" aria-selected="true">Equity Curve</button>
+      <button data-tab="trades" role="tab" aria-selected="false">Trade Log</button>
+    </div>
+    <div class="tabpage active" id="tab-equity"><canvas id="chartEquity" height="120"></canvas></div>
+    <div class="tabpage" id="tab-trades">
+      <div id="trades-wrap">
+        <table id="trades">
+          <thead><tr><th>Date</th><th>Side</th><th>Qty</th><th>Price</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>Made with ❤️ in India by Krishna Anubhav · <a href="https://github.com/heykav/quantdeck">heykav/quantdeck</a></footer>
+
+<script src="app.js"></script>
+</body>
+</html>
