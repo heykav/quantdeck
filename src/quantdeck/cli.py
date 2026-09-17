@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import math
 import sys
 import uuid
 from pathlib import Path
@@ -61,6 +62,12 @@ def _load_strategy(strategy_file: Path) -> type[Strategy]:
     return candidates[0]
 
 
+def _format_ratio(value: float) -> str:
+    """Ratios are unbounded — a run with no losing trades has an infinite
+    profit factor, which reads better as ∞ than as 'inf'."""
+    return "∞" if math.isinf(value) else f"{value:.2f}"
+
+
 @app.command()
 def backtest(
     strategy_file: Path = typer.Argument(
@@ -70,6 +77,12 @@ def backtest(
     start: str = typer.Option(..., "--start", help="Start date, YYYY-MM-DD."),
     end: str = typer.Option(..., "--end", help="End date, YYYY-MM-DD."),
     cash: float = typer.Option(100_000.0, "--cash", help="Starting cash."),
+    risk_free_rate: float = typer.Option(
+        0.0,
+        "--risk-free-rate",
+        "--rf",
+        help="Annualized risk-free rate, e.g. 0.04 for 4%. Drives Sharpe and Sortino.",
+    ),
     db: str = typer.Option("quantdeck.db", "--db", help="SQLite file to save results to."),
 ) -> None:
     """Run a backtest for STRATEGY_FILE against real historical data."""
@@ -92,16 +105,20 @@ def backtest(
 
     values = [p.equity for p in equity_curve]
     trade_pnls = compute_trade_pnls(engine.fills)
-    metrics = compute_metrics(values, trade_pnls)
+    metrics = compute_metrics(values, trade_pnls, risk_free_rate=risk_free_rate)
 
     table = Table(title="Backtest Results")
     table.add_column("Metric")
     table.add_column("Value", justify="right")
     table.add_row("Total Return", f"{metrics.total_return_pct:.2f}%")
     table.add_row("CAGR", f"{metrics.cagr_pct:.2f}%")
+    table.add_row("Volatility (ann.)", f"{metrics.volatility_pct:.2f}%")
     table.add_row("Sharpe Ratio", f"{metrics.sharpe:.2f}")
+    table.add_row("Sortino Ratio", f"{metrics.sortino:.2f}")
+    table.add_row("Calmar Ratio", f"{metrics.calmar:.2f}")
     table.add_row("Max Drawdown", f"{metrics.max_drawdown_pct:.2f}%")
     table.add_row("Win Rate", f"{metrics.win_rate_pct:.2f}%")
+    table.add_row("Profit Factor", _format_ratio(metrics.profit_factor))
     table.add_row("Number of Trades", str(metrics.num_trades))
     table.add_row("Ending Equity", f"${values[-1]:,.2f}")
     console.print(table)
