@@ -12,8 +12,12 @@ class Metrics:
     total_return_pct: float
     cagr_pct: float
     sharpe: float
+    sortino: float
+    calmar: float
+    volatility_pct: float
     max_drawdown_pct: float
     win_rate_pct: float
+    profit_factor: float
     num_trades: int
 
 
@@ -21,7 +25,25 @@ def compute_metrics(
     equity_curve: list[float],
     trade_pnls: list[float],
     periods_per_year: int = 252,
+    risk_free_rate: float = 0.0,
 ) -> Metrics:
+    """Compute performance and risk statistics for an equity curve.
+
+    ``risk_free_rate`` is an *annualized* rate — pass ``0.04`` for 4% — and is
+    converted to a per-period rate before being subtracted from returns, so
+    both Sharpe and Sortino measure return in excess of the risk-free rate
+    rather than raw return. The default of ``0.0`` reproduces the original
+    zero-rate behaviour exactly.
+
+    Ratio metrics are undefined when their denominator is zero (a flat curve
+    has no volatility to divide by, a strategy that never gave back its high
+    water mark has no drawdown). Those cases report ``0.0`` rather than
+    ``inf`` so a single lucky run can't outrank everything else in a
+    comparison; ``profit_factor`` is the deliberate exception and does go to
+    ``inf``, because there the zero denominator means *no losing trades at
+    all*, which is genuinely the best possible outcome rather than a
+    degenerate one.
+    """
     if len(equity_curve) < 2:
         raise ValueError("Need at least two equity points to compute metrics")
 
@@ -37,13 +59,29 @@ def compute_metrics(
         for i in range(1, len(equity_curve))
         if equity_curve[i - 1] != 0
     ]
+
+    risk_free_per_period = risk_free_rate / periods_per_year
+    annualizer = math.sqrt(periods_per_year)
+
     if len(returns) > 1:
         mean = sum(returns) / len(returns)
         variance = sum((r - mean) ** 2 for r in returns) / (len(returns) - 1)
         std = math.sqrt(variance)
-        sharpe = (mean / std) * math.sqrt(periods_per_year) if std > 0 else 0.0
     else:
-        sharpe = 0.0
+        # A single return, or none at all, carries no dispersion information.
+        mean = returns[0] if returns else 0.0
+        std = 0.0
+
+    excess_mean = mean - risk_free_per_period
+    sharpe = (excess_mean / std) * annualizer if std > 0 else 0.0
+    volatility = std * annualizer
+
+    # Downside deviation is taken about the risk-free rate over *all* periods
+    # (dividing by n, not n-1) — the standard definition, since only the
+    # shortfalls contribute to the sum and the flat periods are genuine zeros.
+    shortfalls = [min(r - risk_free_per_period, 0.0) ** 2 for r in returns]
+    downside_dev = math.sqrt(sum(shortfalls) / len(shortfalls)) if shortfalls else 0.0
+    sortino = (excess_mean / downside_dev) * annualizer if downside_dev > 0 else 0.0
 
     peak = equity_curve[0]
     max_dd = 0.0
@@ -52,15 +90,31 @@ def compute_metrics(
         if peak > 0:
             max_dd = max(max_dd, (peak - value) / peak)
 
+    # Calmar pairs the growth rate against the worst peak-to-trough loss, so
+    # it reads as "return per unit of pain" the way Sharpe reads as return per
+    # unit of wiggle.
+    calmar = cagr / max_dd if max_dd > 0 else 0.0
+
     wins = sum(1 for pnl in trade_pnls if pnl > 0)
     win_rate = wins / len(trade_pnls) if trade_pnls else 0.0
+
+    gross_profit = sum(pnl for pnl in trade_pnls if pnl > 0)
+    gross_loss = -sum(pnl for pnl in trade_pnls if pnl < 0)
+    if gross_loss > 0:
+        profit_factor = gross_profit / gross_loss
+    else:
+        profit_factor = math.inf if gross_profit > 0 else 0.0
 
     return Metrics(
         total_return_pct=total_return * 100,
         cagr_pct=cagr * 100,
         sharpe=sharpe,
+        sortino=sortino,
+        calmar=calmar,
+        volatility_pct=volatility * 100,
         max_drawdown_pct=max_dd * 100,
         win_rate_pct=win_rate * 100,
+        profit_factor=profit_factor,
         num_trades=len(trade_pnls),
     )
 
