@@ -74,6 +74,10 @@
     <label for="cash">Starting cash ($)</label>
     <input id="cash" type="number" value="100000" step="1000" min="100" max="100000000" required />
 
+    <label for="riskFreeRate">Risk-free rate (annualized %)</label>
+    <input id="riskFreeRate" type="number" value="0" step="0.25" min="-5" max="25" required />
+    <div class="field-hint">Sharpe/Sortino measure return in excess of this, not raw return.</div>
+
     <button id="run" disabled>Loading Python runtime…</button>
     <div id="status" role="status" aria-live="polite">Downloading Pyodide (~7MB, one time)…</div>
 

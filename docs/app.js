@@ -26,6 +26,7 @@ const FIELD_RULES = {
   fastWindow: { label: "Fast SMA window", min: 1, max: 200, integer: true },
   slowWindow: { label: "Slow SMA window", min: 2, max: 400, integer: true },
   cash: { label: "Starting cash", min: 100, max: 100_000_000, finite: true },
+  riskFreeRate: { label: "Risk-free rate", min: -5, max: 25, finite: true },
 };
 
 let pyodide;
@@ -124,6 +125,7 @@ async function runBacktest() {
   const fastWindow = parseInt(document.getElementById("fastWindow").value, 10);
   const slowWindow = parseInt(document.getElementById("slowWindow").value, 10);
   const cash = parseFloat(document.getElementById("cash").value);
+  const riskFreeRate = parseFloat(document.getElementById("riskFreeRate").value) / 100;
 
   running = true;
   const runBtn = document.getElementById("run");
@@ -139,7 +141,7 @@ async function runBacktest() {
     await new Promise(requestAnimationFrame);
 
     const fn = pyodide.globals.get("run_web_backtest");
-    const raw = fn(symbol, csvText, fastWindow, slowWindow, cash);
+    const raw = fn(symbol, csvText, fastWindow, slowWindow, cash, riskFreeRate);
     const data = JSON.parse(raw);
     if (data.error) {
       setStatus(data.error, true);
@@ -213,9 +215,13 @@ function renderSummary(m) {
   const rows = [
     ["Total Return", m.total_return_pct.toFixed(2) + "%"],
     ["CAGR", m.cagr_pct.toFixed(2) + "%"],
+    ["Volatility (ann.)", m.volatility_pct.toFixed(2) + "%"],
     ["Sharpe Ratio", m.sharpe.toFixed(2)],
+    ["Sortino Ratio", m.sortino.toFixed(2)],
+    ["Calmar Ratio", m.calmar.toFixed(2)],
     ["Max Drawdown", m.max_drawdown_pct.toFixed(2) + "%"],
     ["Win Rate", m.win_rate_pct.toFixed(2) + "%"],
+    ["Profit Factor", m.profit_factor],
     ["Number of Trades", m.num_trades],
     ["Ending Equity", "$" + m.ending_equity.toLocaleString(undefined, { maximumFractionDigits: 2 })],
   ];
