@@ -1,0 +1,86 @@
+name: daily maintenance
+
+# Runs forever on GitHub's own schedule (not tied to any Claude Code
+# session). Finds and fixes one small, genuine issue per day and opens it
+# as a normal PR against main - it never commits directly, so a human
+# glance/merge is always the last step. Turn on GitHub's own auto-merge for
+# this repo if you want that last click to disappear too.
+
+on:
+  schedule:
+    - cron: "13 4 * * *" # ~09:43 IST daily
+  workflow_dispatch: {} # lets you trigger a run manually from the Actions tab
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  maintain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Create working branch
+        run: |
+          git checkout -b "daily-maintenance/$(date +%Y-%m-%d)"
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are running unattended, once a day, on quantdeck (heykav's
+            own backtesting engine). Find ONE genuine, small improvement and
+            fix it on the current branch - a human will review it as a PR,
+            you never merge or push to main yourself.
+
+            Rules:
+            - Only act if you find something real: a failing/flaky test, a
+              genuine bug, a missing edge-case test, a stale dependency pin
+              causing a real deprecation warning, or a docs/README
+              inaccuracy versus the actual code. If the repo is clean today,
+              make no changes and exit quietly - do not invent busywork.
+            - Verify before finishing: run `pytest` and `ruff check .` and
+              confirm both pass after your change, plus whatever specific
+              check proves your fix (a repro that failed before, passes
+              after).
+            - Keep the change small and scoped - one thing per run.
+            - Commit on the current branch (already checked out) with a
+              message ending in:
+              "Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+            - Never touch any file under .github/workflows/, never change
+              LICENSE, never rewrite history, never force-push, never push
+              to main or open the PR yourself - that is handled after you
+              finish.
+          claude_args: |
+            --allowedTools "Read,Edit,Write,Bash(pytest*),Bash(ruff*),Bash(git add*),Bash(git commit*),Bash(python*),Bash(pip*)"
+
+      - name: Push branch and open PR if Claude committed anything
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$(git log main..HEAD --oneline)" ]; then
+            echo "Nothing to do today - no commits made."
+            exit 0
+          fi
+          branch="$(git rev-parse --abbrev-ref HEAD)"
+          git push origin "$branch"
+          gh pr create \
+            --title "Daily maintenance: $(date +%Y-%m-%d)" \
+            --body "Automated daily maintenance pass. See commit message for what changed and why.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)" \
+            --base main \
+            --head "$branch"
