@@ -4,9 +4,12 @@
 
 quantdeck is a backtesting library and CLI. It has no live trading engine,
 does not connect to broker accounts and does not handle credentials. The
-most relevant issues are things like unsafe handling of strategy files,
-CSV input or the local SQLite results file, and problems in the GitHub
-Actions workflows.
+most relevant issues are things like unsafe handling of CSV input or the
+local SQLite results file, and problems in the GitHub Actions workflows.
+
+Strategy files passed to `quantdeck backtest` are ordinary Python modules
+and are imported, so their code runs with your permissions. That is by
+design, not a vulnerability: only run strategy files you trust.
 
 ## Supported versions
 
