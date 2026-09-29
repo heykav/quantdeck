@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 from quantdeck.models import Fill, OrderSide
 
+_NOISE = 1e-12
+
 
 @dataclass
 class Metrics:
@@ -43,16 +45,41 @@ def compute_metrics(
     ``inf``, because there the zero denominator means *no losing trades at
     all*, which is genuinely the best possible outcome rather than a
     degenerate one.
+
+    Conventions (checked against independent numpy calculations in the tests):
+    returns are simple period returns; volatility and Sharpe use the sample
+    standard deviation (ddof=1) annualized by ``sqrt(periods_per_year)``;
+    downside deviation divides by all periods; CAGR uses
+    ``(len(curve) - 1) / periods_per_year`` years; max drawdown is the largest
+    peak-to-trough fall as a fraction of the peak.
+
+    Ruin: the first non-positive equity value ends the curve. It is treated as
+    a total loss (equity 0, return -100%, CAGR -100%, drawdown 100%) and later
+    points are ignored, since a wiped-out account cannot compound back.
+    Ratios whose spread is zero up to float noise (e.g. a constant growth
+    rate) are reported as ``0.0``, not as an astronomically large number.
     """
     if len(equity_curve) < 2:
         raise ValueError("Need at least two equity points to compute metrics")
+    if not all(math.isfinite(v) for v in equity_curve):
+        raise ValueError("Equity curve contains NaN or infinite values")
+    if equity_curve[0] <= 0:
+        raise ValueError("Starting equity must be positive")
+
+    for i, value in enumerate(equity_curve):
+        if value <= 0:
+            equity_curve = [*equity_curve[:i], 0.0]
+            break
 
     start, end = equity_curve[0], equity_curve[-1]
     total_return = (end / start) - 1
 
     num_periods = len(equity_curve) - 1
     years = num_periods / periods_per_year
-    cagr = (end / start) ** (1 / years) - 1 if years > 0 and end > 0 and start > 0 else 0.0
+    if end <= 0:
+        cagr = -1.0
+    else:
+        cagr = (end / start) ** (1 / years) - 1 if years > 0 else 0.0
 
     returns = [
         (equity_curve[i] / equity_curve[i - 1]) - 1
@@ -71,6 +98,8 @@ def compute_metrics(
         # A single return, or none at all, carries no dispersion information.
         mean = returns[0] if returns else 0.0
         std = 0.0
+    if std < _NOISE:
+        std = 0.0  # constant returns: the residual is float rounding, not risk
 
     excess_mean = mean - risk_free_per_period
     sharpe = (excess_mean / std) * annualizer if std > 0 else 0.0
@@ -81,6 +110,8 @@ def compute_metrics(
     # shortfalls contribute to the sum and the flat periods are genuine zeros.
     shortfalls = [min(r - risk_free_per_period, 0.0) ** 2 for r in returns]
     downside_dev = math.sqrt(sum(shortfalls) / len(shortfalls)) if shortfalls else 0.0
+    if downside_dev < _NOISE:
+        downside_dev = 0.0
     sortino = (excess_mean / downside_dev) * annualizer if downside_dev > 0 else 0.0
 
     peak = equity_curve[0]
@@ -121,19 +152,28 @@ def compute_metrics(
 
 def compute_trade_pnls(fills: list[Fill]) -> list[float]:
     """Matches fills FIFO per symbol into round-trip trades and returns each
-    trade's realized P&L (fill price difference x matched quantity)."""
-    lots: dict[str, deque[list]] = defaultdict(deque)  # each lot: [sign, qty, price]
+    trade's realized P&L, net of commission.
+
+    Gross P&L is the fill-price difference times the matched quantity. Each
+    fill's commission is spread over its shares pro rata, so a match is charged
+    for the shares it actually covers on both the opening and closing fill.
+    Positions still open at the end of the data produce no trade.
+    """
+    # each lot: [sign, qty, price, commission per share]
+    lots: dict[str, deque[list[float]]] = defaultdict(deque)
     pnls: list[float] = []
 
     for fill in fills:
         sign = 1 if fill.side == OrderSide.BUY else -1
         remaining = fill.qty
+        comm_per_share = fill.commission / fill.qty if fill.qty else 0.0
         queue = lots[fill.symbol]
 
         while remaining > 0 and queue and queue[0][0] != sign:
-            open_sign, open_qty, open_price = queue[0]
+            open_sign, open_qty, open_price, open_comm = queue[0]
             matched = min(remaining, open_qty)
-            pnls.append((fill.price - open_price) * matched * open_sign)
+            gross = (fill.price - open_price) * matched * open_sign
+            pnls.append(gross - (open_comm + comm_per_share) * matched)
             remaining -= matched
             if matched == open_qty:
                 queue.popleft()
@@ -141,6 +181,6 @@ def compute_trade_pnls(fills: list[Fill]) -> list[float]:
                 queue[0][1] -= matched
 
         if remaining > 0:
-            queue.append([sign, remaining, fill.price])
+            queue.append([sign, remaining, fill.price, comm_per_share])
 
     return pnls

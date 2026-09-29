@@ -1,15 +1,26 @@
 from __future__ import annotations
 
 from quantdeck.broker.base import Broker
-from quantdeck.models import Bar, Fill, Order, OrderSide, Position
+from quantdeck.models import Bar, Fill, Order, OrderSide, Position, RejectedOrder
 
 
 class PaperBroker(Broker):
     """Simulated broker for backtesting.
 
-    Pending orders fill at the *next* bar's open price (never the bar the
-    strategy decided on, which would be look-ahead bias), with a fixed
-    slippage in basis points plus a flat commission per fill.
+    Fill rules (all market orders):
+
+    * A pending order fills at the *next* bar's open price (never the bar the
+      strategy decided on, which would be look-ahead bias).
+    * Slippage is ``slippage_bps`` basis points against you: buys fill above
+      the open, sells below it.
+    * ``commission`` is a flat amount charged per fill (not per share).
+    * A buy that the cash balance cannot cover (notional + commission) is
+      rejected, not partially filled.
+    * Unless ``allow_short`` is set, a sell larger than the current position
+      is rejected, so a strategy cannot accidentally go short.
+
+    Rejected orders are kept in :attr:`rejected` with a reason instead of
+    disappearing silently. Orders still pending when the data ends never fill.
     """
 
     def __init__(
@@ -17,12 +28,17 @@ class PaperBroker(Broker):
         starting_cash: float = 100_000.0,
         slippage_bps: float = 5.0,
         commission: float = 0.0,
+        allow_short: bool = False,
     ) -> None:
+        if starting_cash < 0 or slippage_bps < 0 or commission < 0:
+            raise ValueError("starting_cash, slippage_bps and commission must be >= 0")
         self._cash = starting_cash
         self.slippage_bps = slippage_bps
         self.commission = commission
+        self.allow_short = allow_short
         self._positions: dict[str, Position] = {}
         self._pending: list[Order] = []
+        self.rejected: list[RejectedOrder] = []
 
     def submit_order(self, order: Order) -> None:
         self._pending.append(order)
@@ -42,9 +58,13 @@ class PaperBroker(Broker):
 
             if order.side == OrderSide.BUY:
                 if cost + self.commission > self._cash:
-                    continue  # insufficient cash, drop the order
+                    self._reject(order, bar, "insufficient cash")
+                    continue
                 self._cash -= cost + self.commission
             else:
+                if not self.allow_short and order.qty > self.position_qty(order.symbol) + 1e-9:
+                    self._reject(order, bar, "sell exceeds position (shorting disabled)")
+                    continue
                 self._cash += cost - self.commission
 
             self._apply_fill(order, price)
@@ -61,12 +81,16 @@ class PaperBroker(Broker):
 
         return fills
 
+    def _reject(self, order: Order, bar: Bar, reason: str) -> None:
+        self.rejected.append(RejectedOrder(order=order, reason=reason, timestamp=bar.timestamp))
+
     def _apply_fill(self, order: Order, price: float) -> None:
         pos = self._positions.setdefault(order.symbol, Position(symbol=order.symbol))
         signed_qty = order.qty if order.side == OrderSide.BUY else -order.qty
         new_qty = pos.qty + signed_qty
 
-        if new_qty == 0:
+        if abs(new_qty) < 1e-12:
+            new_qty = 0.0
             pos.avg_price = 0.0
         elif pos.qty == 0 or (pos.qty > 0) != (new_qty > 0):
             # opening a fresh position, or flipping from long to short (or vice versa)
@@ -86,6 +110,7 @@ class PaperBroker(Broker):
         return self._positions.get(symbol, Position(symbol=symbol)).qty
 
     def equity(self, mark_prices: dict[str, float]) -> float:
+        """Cash plus positions marked at ``mark_prices`` (cost basis if unmarked)."""
         value = self._cash
         for symbol, pos in self._positions.items():
             value += pos.qty * mark_prices.get(symbol, pos.avg_price)
