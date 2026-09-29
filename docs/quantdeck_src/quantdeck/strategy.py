@@ -36,10 +36,12 @@ class Strategy(ABC):
         """Called once after the last bar. Override for teardown/reporting."""
 
     def buy(self, qty: float, symbol: str | None = None) -> None:
+        """Queue a market buy of ``qty`` (> 0) shares; fills at the next bar's open."""
         engine = self._require_engine()
         engine.submit_order(Order(symbol=symbol or engine.symbol, side=OrderSide.BUY, qty=qty))
 
     def sell(self, qty: float, symbol: str | None = None) -> None:
+        """Queue a market sell of ``qty`` (> 0) shares; fills at the next bar's open."""
         engine = self._require_engine()
         engine.submit_order(Order(symbol=symbol or engine.symbol, side=OrderSide.SELL, qty=qty))
 
@@ -50,12 +52,15 @@ class Strategy(ABC):
 
     @property
     def position(self) -> float:
+        """Shares currently held (filled orders only; queued orders are not counted)."""
         return self._require_engine().position_qty
 
     @property
     def cash(self) -> float:
+        """Uninvested cash after all fills so far."""
         return self._require_engine().cash
 
     @property
     def equity(self) -> float:
+        """Cash plus the position marked at the current bar's close."""
         return self._require_engine().equity

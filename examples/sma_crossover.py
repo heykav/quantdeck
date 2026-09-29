@@ -1,10 +1,16 @@
 """A classic fast/slow SMA crossover strategy.
 
 Buys when the fast moving average crosses above the slow one, and sells when
-it crosses back below. Run it with:
+it crosses back below. Run it offline on the bundled SYNTHETIC series:
+
+    quantdeck backtest examples/sma_crossover.py --symbol SYN \\
+        --start 2022-01-01 --end 2030-01-01 --csv examples/data/synthetic.csv
+
+or on Yahoo Finance data (needs network):
 
     quantdeck backtest examples/sma_crossover.py --symbol AAPL --start 2023-01-01 --end 2023-12-31
 """
+
 from collections import deque
 
 from quantdeck.models import Bar
@@ -29,7 +35,10 @@ class SmaCrossoverStrategy(Strategy):
         signal = 1 if fast_avg > slow_avg else -1
 
         if signal == 1 and self._prev_signal != 1 and self.position == 0:
-            qty = int(self.cash // bar.close)
+            # Orders fill at the NEXT open plus slippage, which can exceed today's
+            # close. Sizing with 100% of cash would get the order rejected, so keep
+            # a 5% buffer.
+            qty = int(self.cash * 0.95 // bar.close)
             if qty > 0:
                 self.buy(qty)
         elif signal == -1 and self._prev_signal != -1 and self.position > 0:
