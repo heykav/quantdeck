@@ -6,6 +6,7 @@ python scripts/gen_api_docs.py --check    # exit 1 if it is out of date
 
 from __future__ import annotations
 
+import enum
 import importlib
 import inspect
 import sys
@@ -29,6 +30,9 @@ API: list[tuple[str, list[str]]] = [
 
 
 def _doc(obj: object) -> str:
+    if inspect.isclass(obj):
+        # Own docstring only: inherited ones (e.g. from Enum/str) differ by Python version.
+        return inspect.cleandoc(obj.__dict__.get("__doc__") or "")
     return inspect.cleandoc(inspect.getdoc(obj) or "")
 
 
@@ -55,6 +59,11 @@ def render() -> str:
         for name in names:
             obj = getattr(module, name)
             kind = "class" if inspect.isclass(obj) else "def"
+            if inspect.isclass(obj) and issubclass(obj, enum.Enum):
+                # Enum signatures vary across Python versions; list the members instead.
+                members = ", ".join(f"{m.name}={m.value!r}" for m in obj)
+                out += [f"### `enum {name}`", "", f"Members: {members}", ""]
+                continue
             out += [f"### `{kind} {_sig(name, obj)}`", ""]
             if _doc(obj) and not (inspect.isclass(obj) and _doc(obj).startswith(f"{name}(")):
                 out += [_doc(obj), ""]
