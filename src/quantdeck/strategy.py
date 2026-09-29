@@ -14,8 +14,9 @@ class Strategy(ABC):
 
     Subclass this and implement ``on_bar()``. Use ``self.buy()`` / ``self.sell()``
     to trade, and ``self.position`` / ``self.cash`` / ``self.equity`` to inspect
-    the current state. The same subclass runs unchanged in backtesting and (in a
-    later phase) live paper trading — only the data feed and broker differ.
+    the current state. Orders placed in ``on_bar`` fill at the next bar's open.
+    Only the backtest engine exists today; the class only touches a small engine
+    interface, but no live/paper-trading engine is implemented.
     """
 
     def __init__(self) -> None:
