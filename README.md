@@ -1,44 +1,63 @@
 # QuantDeck
 
-A simple, event-driven backtesting framework for algorithmic trading strategies — zero-config, real market data out of the box, no database server required.
+A small, event-driven backtesting framework for single-symbol trading strategies. Write a `Strategy` class, replay it over OHLCV bars, get an equity curve, trade list and risk metrics. It runs offline on CSV files and needs no database server.
 
 <p>
   <a href="https://heykav.github.io/quantdeck/"><img src="https://img.shields.io/badge/Open%20the%20live%20web%20demo-QuantDeck-3AA0FF?style=for-the-badge&labelColor=0d0e12" alt="Open the live QuantDeck web demo"></a>
   &nbsp;&nbsp;
-  <a href="#installation"><img src="https://img.shields.io/badge/Run%20locally-pip%20install%20and%20run-161715?style=for-the-badge&labelColor=0d0e12" alt="Run QuantDeck locally"></a>
-  &nbsp;&nbsp;
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-161715?style=for-the-badge&labelColor=0d0e12" alt="View the MIT license"></a>
 </p>
 
-No install needed to try it — the [live demo](https://heykav.github.io/quantdeck/) runs the real Python engine client-side via [Pyodide](https://pyodide.org) (Python compiled to WASM), not a JS reimplementation. `docs/quantdeck_src` is kept in sync with `src/quantdeck` automatically (`.github/workflows/sync-web-demo.yml`), so that claim can't quietly go stale.
+## Quickstart (offline, about a minute)
 
-QuantDeck was built as a modern alternative to older frameworks like [LiuAlgoTrader](https://github.com/amor71/LiuAlgoTrader): no Postgres setup, no ceremony — write a strategy class, run one command, and see real results against real historical data in seconds.
+```bash
+git clone https://github.com/heykav/quantdeck.git && cd quantdeck
+python3 -m venv .venv && source .venv/bin/activate
+pip install .
 
-![Equity curve](screenshots/equity_curve.png)
+quantdeck backtest examples/sma_crossover.py --symbol SYN \
+    --start 2022-01-01 --end 2030-01-01 --csv examples/data/synthetic.csv
+```
 
-> **New to trading or Python?** This README is written for you too — skip straight to [What is this, actually?](#what-is-this-actually) below.
+Expected output (deterministic; verified from a clean virtualenv):
 
----
+```
+Running backtest: SmaCrossoverStrategy on SYN (2022-01-01 → 2030-01-01)
+         Backtest Results
+┏━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┓
+┃ Metric            ┃      Value ┃
+┡━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━┩
+│ Total Return      │     -9.79% │
+│ CAGR              │     -5.07% │
+│ Volatility (ann.) │     12.00% │
+│ Sharpe Ratio      │      -0.37 │
+│ Sortino Ratio     │      -0.51 │
+│ Calmar Ratio      │      -0.29 │
+│ Max Drawdown      │     17.31% │
+│ Win Rate          │     30.00% │
+│ Profit Factor     │       0.49 │
+│ Number of Trades  │         10 │
+│ Ending Equity     │ $90,214.14 │
+└───────────────────┴────────────┘
+```
 
-## Table of contents
+`examples/data/synthetic.csv` is a **seeded random walk, not market data**, so those numbers only show that the pipeline runs. To use Yahoo Finance data instead (needs network access), drop `--csv`: `quantdeck backtest examples/sma_crossover.py --symbol AAPL --start 2023-01-01 --end 2023-12-31`.
 
-- [Live demo](#live-demo)
-- [What is this, actually?](#what-is-this-actually)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Your first backtest](#your-first-backtest)
-- [Understanding the results](#understanding-the-results)
-- [Writing your own strategy](#writing-your-own-strategy)
-- [How it works under the hood](#how-it-works-under-the-hood)
-- [Glossary](#glossary)
-- [CLI reference](#cli-reference)
-- [Troubleshooting](#troubleshooting)
-- [Development](#development)
-- [Roadmap](#roadmap)
-- [Important disclaimer](#important-disclaimer)
-- [License](#license)
+The same run from Python: `python examples/offline_backtest.py`. See the [tutorial](manual/tutorial.md) and the [API reference](manual/api.md).
 
----
+## What this is / is not
+
+**Is:**
+- A backtester for one symbol at a time, with market orders only.
+- Look-ahead safe by construction: `on_bar(bar)` sees bar `t`; orders fill at the open of bar `t+1` plus slippage.
+- Deterministic and unit-tested, including hand-computed P&L and metrics cross-checked against numpy/pandas.
+
+**Is not:**
+- **Not a live or paper-trading system.** No live engine or broker integration exists in this repository. `Strategy` only talks to a small engine interface, so a live engine could be written, but that has not been done or tested. Alpaca support is a roadmap idea, not a feature.
+- Not a portfolio, multi-asset, limit/stop-order or intraday-microstructure simulator. There is no partial fill, market impact, borrow cost, margin, dividend or split handling beyond what the data feed provides (`YFinanceFeed` uses split/dividend-adjusted prices).
+- Not evidence that a strategy will make money. Backtests overfit easily; results on synthetic data mean nothing. Not financial advice.
+
+Behaviours worth knowing: a buy you cannot afford at the fill price is rejected (see `engine.rejected_orders`); sells beyond your position are rejected unless `allow_short=True`; orders placed on the last bar never fill; commission is a flat amount per fill.
 
 ## Live demo
 
@@ -58,11 +77,11 @@ Before you'd ever trust such a program with real (or even fake) money, you want 
 
 Concretely, QuantDeck gives you three things:
 
-1. **A simple way to write a "strategy"** — a small Python class describing your buy/sell rule.
-2. **A backtesting engine** that fetches real historical stock prices and plays your strategy against them, day by day, tracking exactly how much money you'd have made or lost.
-3. **A results report** — plain numbers (and later, an interactive dashboard) telling you how the strategy performed.
+1. **A simple way to write a "strategy"**: a small Python class with your buy/sell rule.
+2. **A backtesting engine** that plays your strategy over historical bars one at a time, tracking cash, positions and equity.
+3. **A results report**: return, risk metrics and a trade list, saved to SQLite.
 
-You don't need a trading account, an API key, or any setup beyond installing Python and this package. It fetches free public data from Yahoo Finance automatically.
+Offline CSV data needs no account or API key. Yahoo Finance data is optional and needs network access.
 
 ---
 
@@ -139,32 +158,15 @@ Behind the scenes, QuantDeck fetches AAPL's real daily prices for 2023 from Yaho
 
 ## Understanding the results
 
-Running a backtest prints a table like this:
-
-```
-         Backtest Results
-┏━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
-┃ Metric           ┃       Value ┃
-┡━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
-│ Total Return     │      13.88% │
-│ CAGR             │      14.06% │
-│ Sharpe Ratio     │        1.00 │
-│ Max Drawdown     │      12.02% │
-│ Win Rate         │      75.00% │
-│ Number of Trades │           4 │
-│ Ending Equity    │ $113,883.39 │
-└──────────────────┴─────────────┘
-```
-
-Here's what each row means, in plain English:
+Running a backtest prints the table shown in the [Quickstart](#quickstart-offline-about-a-minute). What each row means:
 
 | Metric | What it tells you |
 |---|---|
-| **Total Return** | How much your money grew (or shrank) over the whole period, as a percentage. `13.88%` means $100,000 became about $113,880. |
+| **Total Return** | How much your money grew (or shrank) over the whole period, as a percentage. |
 | **CAGR** | "Compound Annual Growth Rate" — the return re-stated as *"if this rate continued for a full year, every year"*. Useful for comparing strategies tested over different time spans. |
 | **Sharpe Ratio** | A measure of return *relative to how bumpy the ride was*. Roughly: above 1 is decent, above 2 is very good, below 0 means you'd have been better off not trading. It rewards steady gains and penalizes wild swings. |
-| **Max Drawdown** | The single worst drop from a peak to a low point during the test, as a percentage. `12.02%` means at some point your account fell 12% below its previous high before recovering. This is a key measure of "how bad could it get." |
-| **Win Rate** | Of all the completed trades (a buy followed by a matching sell), what percentage made money. `75%` means 3 out of 4 trades were profitable. |
+| **Max Drawdown** | The single worst drop from a peak to a low point during the test, as a percentage. `17%` means at some point your account fell 17% below its previous high. This is a key measure of "how bad could it get." |
+| **Win Rate** | Of all the completed trades (a buy followed by a matching sell), what percentage made money. `30%` means 3 out of 10 trades were profitable. Trade P&L is net of commission. |
 | **Number of Trades** | How many completed round-trip trades the strategy made. |
 | **Ending Equity** | The final dollar value of the account, starting from $100,000 by default. |
 
@@ -198,7 +200,7 @@ A few things to know:
 
 - **`on_bar(self, bar)`** is called once for every day (or "bar") of historical data, in order. This is the only method you *must* implement — it's where your trading logic goes.
 - **`bar`** is the current day's price data. It has `bar.open`, `bar.high`, `bar.low`, `bar.close`, `bar.volume`, and `bar.timestamp`.
-- **`self.buy(qty)`** and **`self.sell(qty)`** place orders. Orders fill at the *next* day's opening price — never the price of the day you decided to trade, since in real life you can't buy at a price you've already seen close.
+- **`self.buy(qty)`** and **`self.sell(qty)`** place orders. Orders fill at the *next* bar's opening price (plus slippage) — never the price of the day you decided to trade, since in real life you can't buy at a price you've already seen close.
 - **`self.position`** tells you how many shares you currently hold (0 if none).
 - **`self.cash`** is how much uninvested cash you have; **`self.equity`** is your total account value (cash + the current value of anything you're holding).
 - **`on_start(self)`** and **`on_end(self)`** are optional — override them to set up variables before the backtest begins, or to do something after it ends.
@@ -230,7 +232,7 @@ Storage (SQLite) + Metrics (return, CAGR, Sharpe, drawdown, win rate)
 
 In plain words: the **engine** is a loop that hands your strategy one day of prices at a time. Whenever your strategy calls `buy()` or `sell()`, the engine passes that order to a simulated **broker**, which fills it at a realistic price (accounting for typical trading costs) and updates your account. After every day, the engine records your total account value, building up an **equity curve** — and at the end, the **metrics** module turns that curve into the summary table you saw above.
 
-The `Strategy` interface is deliberately broker-agnostic: the same strategy code that runs in a backtest is designed to run against a live paper-trading broker in a later phase, without any changes to your strategy.
+Only this backtest path is implemented. `Strategy` calls a small engine surface (`submit_order`, `cash`, `position_qty`, `equity`), which a live engine could implement in future; no such engine exists today.
 
 ---
 
@@ -238,9 +240,9 @@ The `Strategy` interface is deliberately broker-agnostic: the same strategy code
 
 Terms you'll see throughout this project:
 
-- **Bar** — one unit of price data (e.g., one day's open/high/low/close/volume). QuantDeck currently uses daily bars.
+- **Bar** — one unit of price data (e.g., one day's open/high/low/close/volume). Metrics assume daily bars (252 periods/year).
 - **Backtest** — simulating a strategy against historical data to see how it would have performed.
-- **Paper trading** — trading with fake money against real, live prices (as opposed to a backtest, which uses past data). This is a later-phase feature.
+- **Paper trading** — trading with fake money against real, live prices (as opposed to a backtest, which uses past data). QuantDeck does not do this; its `PaperBroker` only simulates fills inside a backtest.
 - **Slippage** — the small difference between the price you expected to pay and the price you actually got, which happens in real trading. QuantDeck simulates this so backtest results aren't unrealistically perfect.
 - **Commission** — a fee charged per trade by a broker.
 - **Look-ahead bias** — a common backtesting mistake where a strategy accidentally "sees the future" (e.g., trading at a price it couldn't have known yet). QuantDeck avoids this by filling orders at the *next* bar's price.
@@ -254,7 +256,7 @@ Terms you'll see throughout this project:
 | Command | What it does |
 |---|---|
 | `quantdeck init [path]` | Creates a starter strategy file (defaults to `strategy.py`). |
-| `quantdeck backtest <file> --symbol <TICKER> --start <YYYY-MM-DD> --end <YYYY-MM-DD>` | Runs a backtest. Optional: `--cash <amount>` (starting cash, default $100,000) and `--db <path>` (where to save results, default `quantdeck.db`). |
+| `quantdeck backtest <file> --symbol <TICKER> --start <YYYY-MM-DD> --end <YYYY-MM-DD>` | Runs a backtest. Optional: `--csv <file>` (offline OHLCV data instead of Yahoo Finance), `--cash`, `--slippage-bps` (default 5), `--commission` (flat per fill), `--risk-free-rate`, `--db` (default `quantdeck.db`). |
 | `quantdeck --help` | Lists all commands. |
 
 ---
@@ -272,8 +274,10 @@ Terms you'll see throughout this project:
 
 ```bash
 pip install -e ".[dev]"
-pytest          # run the test suite
-ruff check .    # run the linter
+pytest                              # tests (offline, deterministic)
+ruff check . && ruff format --check src tests examples scripts
+mypy                                # strict type check
+python scripts/gen_api_docs.py      # regenerate manual/api.md
 ```
 
 ---
@@ -281,8 +285,8 @@ ruff check .    # run the linter
 ## Roadmap
 
 - [x] **Phase 1** — event-driven backtest engine, strategy interface, SQLite storage, metrics, CLI
-- [ ] **Phase 2** — interactive Streamlit dashboard (equity curve, trade log, positions)
-- [ ] **Phase 3** — live paper trading via Alpaca, using the same `Strategy` interface
+- [ ] **Phase 2** — interactive Streamlit dashboard (equity curve, trade log, positions), not started
+- [ ] **Phase 3** — idea only, not started: a live/paper-trading engine reusing `Strategy`
 
 ---
 

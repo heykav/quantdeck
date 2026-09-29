@@ -16,5 +16,4 @@ class DataFeed(ABC):
         start: date | datetime | str,
         end: date | datetime | str,
         timeframe: str = "1d",
-    ) -> list[Bar]:
-        ...
+    ) -> list[Bar]: ...

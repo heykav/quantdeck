@@ -67,6 +67,7 @@ class BacktestEngine:
         strategy.bind(self)
 
     def submit_order(self, order: Order) -> None:
+        """Queue an order for the broker; it fills at the next bar's open."""
         if order.symbol != self.symbol:
             raise ValueError(
                 f"Engine trades {self.symbol!r} only; cannot place an order for {order.symbol!r}"
@@ -80,14 +81,17 @@ class BacktestEngine:
 
     @property
     def cash(self) -> float:
+        """Uninvested cash after all fills so far."""
         return self.broker.cash
 
     @property
     def position_qty(self) -> float:
+        """Shares of the traded symbol currently held."""
         return self.broker.position_qty(self.symbol)
 
     @property
     def equity(self) -> float:
+        """Cash plus the position marked at the latest bar's close."""
         return self.broker.equity({self.symbol: self._last_price})
 
     @staticmethod
@@ -105,6 +109,7 @@ class BacktestEngine:
             prev = bar.timestamp
 
     def run(self) -> list[EquityPoint]:
+        """Run the backtest once and return one equity point per bar."""
         if self._has_run:
             raise RuntimeError("BacktestEngine.run() can only be called once; build a new engine")
         self._has_run = True

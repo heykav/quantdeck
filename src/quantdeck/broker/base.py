@@ -9,8 +9,7 @@ class Broker(ABC):
     """Executes orders and tracks cash/positions."""
 
     @abstractmethod
-    def submit_order(self, order: Order) -> None:
-        ...
+    def submit_order(self, order: Order) -> None: ...
 
     @abstractmethod
     def process_bar(self, bar: Bar) -> list[Fill]:
@@ -18,9 +17,7 @@ class Broker(ABC):
 
     @property
     @abstractmethod
-    def cash(self) -> float:
-        ...
+    def cash(self) -> float: ...
 
     @abstractmethod
-    def position_qty(self, symbol: str) -> float:
-        ...
+    def position_qty(self, symbol: str) -> float: ...

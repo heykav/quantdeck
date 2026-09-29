@@ -11,7 +11,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from quantdeck.data.yfinance_feed import YFinanceFeed
+from quantdeck.data.base import DataFeed
+from quantdeck.data.csv_feed import CSVDataFeed
 from quantdeck.engine import BacktestEngine
 from quantdeck.metrics import compute_metrics, compute_trade_pnls
 from quantdeck.storage import Storage
@@ -84,18 +85,36 @@ def backtest(
         help="Annualized risk-free rate, e.g. 0.04 for 4%. Drives Sharpe and Sortino.",
     ),
     db: str = typer.Option("quantdeck.db", "--db", help="SQLite file to save results to."),
+    csv: Path | None = typer.Option(
+        None,
+        "--csv",
+        help="Read bars from this OHLCV CSV instead of Yahoo Finance (works offline). "
+        "Columns: timestamp,open,high,low,close,volume.",
+    ),
+    slippage_bps: float = typer.Option(5.0, "--slippage-bps", help="Slippage per fill, in bps."),
+    commission: float = typer.Option(0.0, "--commission", help="Flat commission per fill."),
 ) -> None:
-    """Run a backtest for STRATEGY_FILE against real historical data."""
+    """Run a backtest for STRATEGY_FILE on Yahoo Finance data, or on --csv data."""
     strategy_cls = _load_strategy(strategy_file)
     strategy = strategy_cls()
 
+    feed: DataFeed
+    if csv is not None:
+        feed = CSVDataFeed(csv)
+    else:
+        from quantdeck.data.yfinance_feed import YFinanceFeed  # network feed, imported lazily
+
+        feed = YFinanceFeed()
+
     engine = BacktestEngine(
         strategy=strategy,
-        data_feed=YFinanceFeed(),
+        data_feed=feed,
         symbol=symbol,
         start=start,
         end=end,
         starting_cash=cash,
+        slippage_bps=slippage_bps,
+        commission=commission,
     )
 
     console.print(
