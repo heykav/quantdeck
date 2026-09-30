@@ -9,10 +9,11 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from quantdeck.data.base import DataFeed
-from quantdeck.data.csv_feed import CSVDataFeed
+from quantdeck.data.csv_feed import CSVDataFeed, CSVFormatError
 from quantdeck.engine import BacktestEngine
 from quantdeck.metrics import compute_metrics, compute_trade_pnls
 from quantdeck.storage import Storage
@@ -120,7 +121,12 @@ def backtest(
     console.print(
         f"Running backtest: [bold]{strategy_cls.__name__}[/bold] on {symbol} ({start} → {end})"
     )
-    equity_curve = engine.run()
+    try:
+        equity_curve = engine.run()
+    except (CSVFormatError, FileNotFoundError) as exc:
+        # Bad input data is a user error: show the message, not a traceback.
+        console.print(f"[red]Error:[/red] {escape(str(exc))}", highlight=False, soft_wrap=True)
+        raise typer.Exit(code=1) from None
 
     values = [p.equity for p in equity_curve]
     trade_pnls = compute_trade_pnls(engine.fills)
