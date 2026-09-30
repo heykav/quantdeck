@@ -1,7 +1,15 @@
 from __future__ import annotations
 
 from quantdeck.broker.base import Broker
-from quantdeck.models import Bar, Fill, Order, OrderSide, Position, RejectedOrder
+from quantdeck.models import (
+    Bar,
+    Fill,
+    Order,
+    OrderSide,
+    Position,
+    RejectedOrder,
+    qty_tolerance,
+)
 
 
 class PaperBroker(Broker):
@@ -17,7 +25,14 @@ class PaperBroker(Broker):
     * A buy that the cash balance cannot cover (notional + commission) is
       rejected, not partially filled.
     * Unless ``allow_short`` is set, a sell larger than the current position
-      is rejected, so a strategy cannot accidentally go short.
+      is rejected, so a strategy cannot accidentally go short. A sell that
+      exceeds the position only by float noise (see :func:`quantdeck.models.qty_tolerance`)
+      is filled for exactly the shares held instead.
+    * A position left with only float-noise shares after a fill is set to
+      exactly zero, so ``position == 0`` checks in strategies work.
+    * With ``allow_short`` there is no margin requirement or borrow cost: a
+      short sale credits the full proceeds to cash, and buying back is only
+      limited by the cash balance, like any other buy.
 
     Rejected orders are kept in :attr:`rejected` with a reason instead of
     disappearing silently. Orders still pending when the data ends never fill.
@@ -54,25 +69,28 @@ class PaperBroker(Broker):
 
             slip = bar.open * (self.slippage_bps / 10_000)
             price = bar.open + slip if order.side == OrderSide.BUY else bar.open - slip
-            cost = price * order.qty
+            qty = order.qty
 
             if order.side == OrderSide.BUY:
-                if cost + self.commission > self._cash:
+                if price * qty + self.commission > self._cash:
                     self._reject(order, bar, "insufficient cash")
                     continue
-                self._cash -= cost + self.commission
+                self._cash -= price * qty + self.commission
             else:
-                if not self.allow_short and order.qty > self.position_qty(order.symbol) + 1e-9:
-                    self._reject(order, bar, "sell exceeds position (shorting disabled)")
-                    continue
-                self._cash += cost - self.commission
+                held = self.position_qty(order.symbol)
+                if not self.allow_short and qty > held:
+                    if held <= 0 or qty - held > qty_tolerance(qty, held):
+                        self._reject(order, bar, "sell exceeds position (shorting disabled)")
+                        continue
+                    qty = held  # only float noise over the position: sell exactly what is held
+                self._cash += price * qty - self.commission
 
-            self._apply_fill(order, price)
+            self._apply_fill(order.symbol, order.side, qty, price)
             fills.append(
                 Fill(
                     symbol=order.symbol,
                     side=order.side,
-                    qty=order.qty,
+                    qty=qty,
                     price=price,
                     timestamp=bar.timestamp,
                     commission=self.commission,
@@ -84,12 +102,12 @@ class PaperBroker(Broker):
     def _reject(self, order: Order, bar: Bar, reason: str) -> None:
         self.rejected.append(RejectedOrder(order=order, reason=reason, timestamp=bar.timestamp))
 
-    def _apply_fill(self, order: Order, price: float) -> None:
-        pos = self._positions.setdefault(order.symbol, Position(symbol=order.symbol))
-        signed_qty = order.qty if order.side == OrderSide.BUY else -order.qty
+    def _apply_fill(self, symbol: str, side: OrderSide, qty: float, price: float) -> None:
+        pos = self._positions.setdefault(symbol, Position(symbol=symbol))
+        signed_qty = qty if side == OrderSide.BUY else -qty
         new_qty = pos.qty + signed_qty
 
-        if abs(new_qty) < 1e-12:
+        if abs(new_qty) <= qty_tolerance(pos.qty, qty):
             new_qty = 0.0
             pos.avg_price = 0.0
         elif pos.qty == 0 or (pos.qty > 0) != (new_qty > 0):
