@@ -81,6 +81,6 @@ jobs:
             --title "Daily maintenance: $(date +%Y-%m-%d)" \
             --body "Automated daily maintenance pass. See commit message for what changed and why.
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)" \
+          🤖 Generated with [Claude Code](https://claude.com/claude-code)" \
             --base main \
             --head "$branch"
