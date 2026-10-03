@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "QuantDeck"
+abstract: "A small, event-driven backtesting framework for single-symbol trading strategies."
+type: software
+authors:
+  - given-names: Krishna
+    family-names: Anubhav
+    alias: heykav
+version: 0.1.0
+license: MIT
+repository-code: "https://github.com/heykav/quantdeck"
+url: "https://heykav.github.io/quantdeck/"
+keywords:
+  - backtesting
+  - algorithmic-trading
+  - python
