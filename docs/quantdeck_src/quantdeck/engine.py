@@ -94,10 +94,16 @@ class BacktestEngine:
         """Cash plus the position marked at the latest bar's close."""
         return self.broker.equity({self.symbol: self._last_price})
 
-    @staticmethod
-    def _validate_bars(bars: list[Bar]) -> None:
+    def _validate_bars(self, bars: list[Bar]) -> None:
         prev = None
         for bar in bars:
+            if bar.symbol != self.symbol:
+                # The broker only fills an order on a bar of the same symbol,
+                # so a mismatch would leave every order pending forever.
+                raise ValueError(
+                    f"Data feed returned a bar for {bar.symbol!r} at {bar.timestamp}, "
+                    f"but this engine trades {self.symbol!r}"
+                )
             prices = (bar.open, bar.high, bar.low, bar.close)
             if not all(math.isfinite(x) and x > 0 for x in prices) or bar.low > bar.high:
                 raise ValueError(f"Invalid prices in bar at {bar.timestamp}: {bar}")

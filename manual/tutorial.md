@@ -55,8 +55,11 @@ Consequences:
 
 - An order placed on the last bar never fills.
 - `cash // bar.close` can be too much: the fill price is the next open plus slippage. A buy that costs more than your cash is **rejected**, not resized. The bundled SMA example originally sized with 100% of cash and had 7 buy orders rejected on the synthetic series; it now keeps a 5% buffer. Check `engine.rejected_orders` when results look too quiet.
-- Selling more than you hold is rejected unless `allow_short=True`.
+- Selling more than you hold is rejected unless `allow_short=True`. A sell that overshoots the position only by float rounding (e.g. fractional sizes such as `0.1 + 0.2`) sells exactly what you hold, and a position left with only rounding dust is set to exactly 0.
+- With `allow_short=True` there is no margin requirement and no borrow cost. A short that runs against you can push equity below zero, and buying back is rejected if cash cannot cover it.
+- Nothing is liquidated at the end of the data: an open position is marked at the last close in the equity curve, but it is not a completed trade, so it does not count towards win rate, profit factor or the number of trades.
 - `buy(0)`, negative or NaN quantities raise `ValueError`.
+- The data feed must return bars labelled with the engine's `symbol`; a mismatch raises `ValueError` (previously every order silently stayed unfilled).
 
 ## 3. Run it and look at the results
 
@@ -85,7 +88,10 @@ quantdeck backtest my_strategy.py --symbol SYN --start 2022-01-01 --end 2030-01-
 
 ## 4. Check your own strategy for look-ahead bias
 
-The engine prevents the usual mistakes, but a strategy can still cheat through its own code (e.g. loading the whole CSV and indexing into the future). A cheap sanity test: run it on a series where every bar opens at the same price and closes alternately up and down. A strategy that only uses information available at bar close cannot earn a systematic profit there. `tests/test_engine_correctness.py::test_peeking_style_strategy_earns_nothing` shows the pattern.
+The engine prevents the usual mistakes, but a strategy can still cheat through its own code (e.g. loading the whole CSV and indexing into the future). Two cheap checks:
+
+- **Change the future, compare the past.** Run the strategy twice, the second time with every bar after some index `k` replaced by unrelated prices. The orders placed on bars `0..k`, the fills up to bar `k` and the equity curve up to bar `k` must be identical. `tests/test_lookahead_and_edges.py::test_changing_the_future_does_not_change_the_past` does this for the bundled strategies; it fails if the engine hands `on_bar` the next bar instead of the current one.
+- **A series with nothing to predict.** Every bar opens at the same price and closes alternately up and down. A strategy that only uses information available at bar close cannot earn a systematic profit there. `tests/test_engine_correctness.py::test_peeking_style_strategy_earns_nothing` shows the pattern.
 
 ## 5. Metric conventions
 
@@ -99,6 +105,18 @@ The engine prevents the usual mistakes, but a strategy can still cheat through i
 | Calmar | CAGR / max drawdown |
 | win rate, profit factor | from FIFO-matched round trips, net of commission |
 
-Edge cases: zero-variance curves give 0.0 for the ratios; a curve that reaches zero or negative equity is treated as ruin (-100% return, 100% drawdown); zero drawdown gives Calmar 0.0; no losing trades gives an infinite profit factor. `periods_per_year` defaults to 252, so pass it explicitly for non-daily data.
+Annualisation: every annualised figure uses `periods_per_year`, which defaults to 252 (daily bars), so pass it explicitly for other bar sizes. CAGR counts `n - 1` periods for an `n`-point curve, so 253 daily equity points are exactly one year. There is no simple-return ("non-compounded") CAGR option.
+
+Edge cases: zero-variance curves give 0.0 for the ratios; a curve that reaches zero or negative equity is treated as ruin (-100% return, -100% CAGR, 100% drawdown; later points are ignored); zero drawdown gives Calmar 0.0; no losing trades gives an infinite profit factor. Very short samples annualise to extreme CAGRs; one that overflows a float (e.g. +9,900% in one daily bar) is reported as `inf` instead of raising. `periods_per_year <= 0` or a non-finite `risk_free_rate` raise `ValueError`.
+
+## 6. Data files and date ranges
+
+`CSVDataFeed` needs the columns `timestamp,open,high,low,close,volume` (header case and surrounding spaces do not matter; extra columns are ignored). A missing column, an unparseable timestamp or a blank / non-numeric value raises `CSVFormatError` (a `ValueError`) naming the file and line, for example:
+
+```
+bars.csv: line 3: high value (blank) is not a number (1 bad value(s) in column high)
+```
+
+`start` and `end` are inclusive for both `CSVDataFeed` and `YFinanceFeed`. A date-only `end` such as `"2023-12-29"` includes every bar on that day; an `end` with a time of day is an exact cut-off. (Yahoo's own `end` is exclusive; the feed requests one extra day and trims.)
 
 See [api.md](api.md) for every public signature.
