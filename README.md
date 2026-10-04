@@ -339,3 +339,21 @@ QuantDeck is an educational and research tool. It only backtests: it has no live
 ## License
 
 MIT
+
+## Export a backtest report
+
+Add `--report report.json` to any `quantdeck backtest` command. For an offline example:
+
+```sh
+quantdeck backtest examples/sma_crossover.py --symbol SYN --start 2022-01-01 --end 2030-01-01 --csv examples/data/synthetic.csv --report report.json
+```
+
+The versioned JSON includes run parameters, strategy/CSV filenames and SHA-256
+hashes, package/Python versions, metrics, fills and the equity curve. Non-finite
+numbers become `null`. The report is written atomically and cannot overwrite the
+strategy, CSV or SQLite database. Without this option, CLI and database behavior
+remain unchanged. A report write error exits nonzero before saving the database.
+
+Hashes identify the named files, not imported strategy modules or a pinned
+environment. Yahoo data is not snapshotted. Matching hashes alone do not guarantee
+reproducibility, and backtests do not establish live trading performance.
