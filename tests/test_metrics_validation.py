@@ -148,3 +148,47 @@ def test_trade_pnls_short_round_trip_and_flip():
     fills = [_fill(OrderSide.SELL, 5, 100, 1), _fill(OrderSide.BUY, 8, 90, 2)]
     # covers the 5-share short for +50 and opens a 3-share long (no closed trade yet)
     assert compute_trade_pnls(fills) == [50.0]
+
+
+def test_fully_hand_derived_ratios():
+    # returns +10%, -5%, +10%: mean 0.05, sample std sqrt(0.0075) = 0.0866,
+    # downside deviation sqrt(0.05**2 / 3) = 0.05 / sqrt(3). With 3 periods
+    # per year that is exactly Sharpe 1, Sortino 3 and volatility 15%.
+    m = compute_metrics([100, 110, 104.5, 114.95], [], periods_per_year=3)
+    assert m.sharpe == pytest.approx(1.0)
+    assert m.sortino == pytest.approx(3.0)
+    assert m.volatility_pct == pytest.approx(15.0)
+    assert m.cagr_pct == pytest.approx(14.95)  # exactly one year
+    assert m.max_drawdown_pct == pytest.approx(5.0)
+    assert m.calmar == pytest.approx(14.95 / 5.0)
+
+
+def test_huge_short_sample_gain_reports_infinite_cagr_instead_of_crashing():
+    # Regression: 100x over one daily bar annualizes to 100**252, which used
+    # to raise OverflowError out of compute_metrics.
+    m = compute_metrics([100.0, 10_000.0], [])
+    assert m.cagr_pct == math.inf
+    assert m.total_return_pct == pytest.approx(9_900.0)
+    assert m.calmar == 0.0  # no drawdown
+
+
+@pytest.mark.parametrize("ppy", [0, -252])
+def test_non_positive_periods_per_year_is_rejected(ppy):
+    with pytest.raises(ValueError, match="periods_per_year"):
+        compute_metrics([100, 101, 102], [], periods_per_year=ppy)
+
+
+@pytest.mark.parametrize("rf", [math.nan, math.inf])
+def test_non_finite_risk_free_rate_is_rejected(rf):
+    with pytest.raises(ValueError, match="risk_free_rate"):
+        compute_metrics([100, 101, 102], [], risk_free_rate=rf)
+
+
+def test_trade_pnls_ignore_float_residue_lots():
+    t = datetime(2024, 1, 1)
+    fills = [Fill("X", OrderSide.BUY, 0.3, 10.0, t)]
+    fills += [Fill("X", OrderSide.SELL, 0.1, 11.0, t)] * 3
+    fills += [Fill("X", OrderSide.BUY, 1.0, 10.0, t), Fill("X", OrderSide.SELL, 1.0, 12.0, t)]
+    pnls = compute_trade_pnls(fills)
+    assert len(pnls) == 4
+    assert pnls == pytest.approx([0.1, 0.1, 0.1, 2.0])

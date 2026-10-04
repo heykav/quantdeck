@@ -110,16 +110,41 @@ def fmt_metric_rows(m: Metrics, ending_equity: float) -> list[tuple[str, str]]:
     ]
 
 
+def _money_k(x: float, _pos: object = None) -> str:
+    """Tick label in $k, with a decimal only when the tick needs one."""
+    k = x / 1000
+    return f"${k:,.0f}k" if abs(k - round(k)) < 1e-9 else f"${k:,.1f}k"
+
+
+def _style_axis(ax, c) -> None:
+    ax.set_facecolor(c["bg"])
+    ax.grid(axis="y", color=c["grid"], lw=0.8)
+    ax.set_axisbelow(True)
+    for s in ("top", "right", "left"):
+        ax.spines[s].set_visible(False)
+    ax.spines["bottom"].set_color(c["edge"])
+    ax.tick_params(colors=c["muted"], labelsize=9, length=0)
+
+
 def equity_figure(theme: str, dates, equity, fills, m: Metrics, out: Path) -> None:
     c = THEMES[theme]
-    fig, ax = plt.subplots(figsize=(11, 5.6), dpi=150, facecolor=c["bg"])
-    ax.set_facecolor(c["bg"])
+    fig, (ax, ax_dd) = plt.subplots(
+        2,
+        1,
+        figsize=(11, 6.6),
+        dpi=150,
+        facecolor=c["bg"],
+        sharex=True,
+        gridspec_kw={"height_ratios": [3, 1.15], "hspace": 0.08},
+    )
     peak = []
     hi = equity[0]
     for v in equity:
         hi = max(hi, v)
         peak.append(hi)
-    ax.fill_between(dates, equity, peak, color=c["dd"], alpha=0.22, lw=0, label="Drawdown")
+    # Same definition as compute_metrics: fall from the running peak, in %.
+    drawdown = [(v - p) / p * 100 for v, p in zip(equity, peak, strict=True)]
+
     ax.plot(dates, peak, color=c["muted"], lw=0.8, ls=(0, (4, 3)), label="Running peak")
     ax.plot(dates, equity, color=c["line"], lw=1.8, label="Equity")
     buys = [(d, v) for d, v, s in fills if s == OrderSide.BUY]
@@ -130,24 +155,41 @@ def equity_figure(theme: str, dates, equity, fills, m: Metrics, out: Path) -> No
     ax.scatter(
         *zip(*sells, strict=True), marker="v", s=46, color=c["sell"], zorder=4, label="Sell fill"
     )
-    ax.grid(axis="y", color=c["grid"], lw=0.8)
-    ax.set_axisbelow(True)
-    for s in ("top", "right", "left"):
-        ax.spines[s].set_visible(False)
-    ax.spines["bottom"].set_color(c["edge"])
-    ax.tick_params(colors=c["muted"], labelsize=9, length=0)
-    ax.yaxis.set_major_formatter(lambda x, _: f"${x / 1000:,.0f}k")
+    _style_axis(ax, c)
+    ax.yaxis.set_major_formatter(_money_k)
     ax.legend(
         loc="lower left",
         bbox_to_anchor=(0, 1.0),
         frameon=False,
         labelcolor=c["muted"],
         fontsize=9,
-        ncol=5,
+        ncol=4,
     )
+
+    ax_dd.fill_between(dates, drawdown, 0, color=c["dd"], alpha=0.28, lw=0)
+    ax_dd.plot(dates, drawdown, color=c["dd"], lw=1.0)
+    worst = min(range(len(drawdown)), key=drawdown.__getitem__)
+    # The panel is drawn from the equity curve itself; it must agree with the metric.
+    assert abs(-drawdown[worst] - m.max_drawdown_pct) < 1e-9, (drawdown[worst], m)
+    ax_dd.scatter([dates[worst]], [drawdown[worst]], s=18, color=c["dd"], zorder=4)
+    ax_dd.annotate(
+        f"max drawdown {m.max_drawdown_pct:.2f}%",
+        (dates[worst], drawdown[worst]),
+        xytext=(-8, 0),
+        textcoords="offset points",
+        color=c["fg"],
+        fontsize=8.5,
+        ha="right",
+        va="center",
+    )
+    _style_axis(ax_dd, c)
+    ax_dd.set_ylim(min(drawdown) * 1.3, 0.8)
+    ax_dd.yaxis.set_major_formatter(lambda x, _: f"{x:.0f}%")
+    ax_dd.set_ylabel("Drawdown", color=c["muted"], fontsize=9)
+
     fig.text(
         0.055,
-        0.945,
+        0.955,
         "Equity curve, drawdown and trades",
         color=c["fg"],
         fontsize=15,
@@ -157,7 +199,7 @@ def equity_figure(theme: str, dates, equity, fills, m: Metrics, out: Path) -> No
     )
     fig.text(
         0.055,
-        0.895,
+        0.912,
         f"{RUN_INFO}  ·  total return {m.total_return_pct:.2f}%,"
         f" max drawdown {m.max_drawdown_pct:.2f}%",
         color=c["muted"],
@@ -165,8 +207,8 @@ def equity_figure(theme: str, dates, equity, fills, m: Metrics, out: Path) -> No
         ha="left",
         va="top",
     )
-    fig.text(0.055, 0.03, f"{SYNTH}. {SCOPE}", color=c["muted"], fontsize=8.5, ha="left")
-    fig.subplots_adjust(left=0.075, right=0.975, top=0.80, bottom=0.11)
+    fig.text(0.055, 0.025, f"{SYNTH}. {SCOPE}", color=c["muted"], fontsize=8.5, ha="left")
+    fig.subplots_adjust(left=0.085, right=0.975, top=0.83, bottom=0.095)
     _save(fig, out / f"equity-{theme}.png")
 
 

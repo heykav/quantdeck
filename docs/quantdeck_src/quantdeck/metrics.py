@@ -4,7 +4,7 @@ import math
 from collections import defaultdict, deque
 from dataclasses import dataclass
 
-from quantdeck.models import Fill, OrderSide
+from quantdeck.models import Fill, OrderSide, qty_tolerance
 
 _NOISE = 1e-12
 
@@ -53,6 +53,10 @@ def compute_metrics(
     ``(len(curve) - 1) / periods_per_year`` years; max drawdown is the largest
     peak-to-trough fall as a fraction of the peak.
 
+    Short samples: CAGR annualizes whatever span it is given, so a few bars
+    can produce extreme values; if the annualized figure exceeds the float
+    range it is reported as ``inf`` rather than raising ``OverflowError``.
+
     Ruin: the first non-positive equity value ends the curve. It is treated as
     a total loss (equity 0, return -100%, CAGR -100%, drawdown 100%) and later
     points are ignored, since a wiped-out account cannot compound back.
@@ -61,6 +65,10 @@ def compute_metrics(
     """
     if len(equity_curve) < 2:
         raise ValueError("Need at least two equity points to compute metrics")
+    if not periods_per_year > 0:
+        raise ValueError(f"periods_per_year must be positive, got {periods_per_year!r}")
+    if not math.isfinite(risk_free_rate):
+        raise ValueError(f"risk_free_rate must be finite, got {risk_free_rate!r}")
     if not all(math.isfinite(v) for v in equity_curve):
         raise ValueError("Equity curve contains NaN or infinite values")
     if equity_curve[0] <= 0:
@@ -79,7 +87,12 @@ def compute_metrics(
     if end <= 0:
         cagr = -1.0
     else:
-        cagr = (end / start) ** (1 / years) - 1 if years > 0 else 0.0
+        try:
+            cagr = (end / start) ** (1 / years) - 1
+        except OverflowError:
+            # A big gain over a very short sample annualizes past the float
+            # range (e.g. 100x in one daily bar is 100**252); report inf.
+            cagr = math.inf
 
     returns = [
         (equity_curve[i] / equity_curve[i - 1]) - 1
@@ -157,7 +170,9 @@ def compute_trade_pnls(fills: list[Fill]) -> list[float]:
     Gross P&L is the fill-price difference times the matched quantity. Each
     fill's commission is spread over its shares pro rata, so a match is charged
     for the shares it actually covers on both the opening and closing fill.
-    Positions still open at the end of the data produce no trade.
+    Positions still open at the end of the data produce no trade. Quantity
+    residues within :func:`quantdeck.models.qty_tolerance` are treated as
+    zero, matching how the broker settles positions.
     """
     # each lot: [sign, qty, price, commission per share]
     lots: dict[str, deque[list[float]]] = defaultdict(deque)
@@ -168,19 +183,22 @@ def compute_trade_pnls(fills: list[Fill]) -> list[float]:
         remaining = fill.qty
         comm_per_share = fill.commission / fill.qty if fill.qty else 0.0
         queue = lots[fill.symbol]
+        # Leftovers this small are float rounding (0.3 - 0.1 - 0.1 - 0.1 is
+        # not 0), not shares; keeping them would book phantom trades later.
+        tol = qty_tolerance(fill.qty)
 
-        while remaining > 0 and queue and queue[0][0] != sign:
+        while remaining > tol and queue and queue[0][0] != sign:
             open_sign, open_qty, open_price, open_comm = queue[0]
             matched = min(remaining, open_qty)
             gross = (fill.price - open_price) * matched * open_sign
             pnls.append(gross - (open_comm + comm_per_share) * matched)
             remaining -= matched
-            if matched == open_qty:
+            if open_qty - matched <= qty_tolerance(open_qty):
                 queue.popleft()
             else:
                 queue[0][1] -= matched
 
-        if remaining > 0:
+        if remaining > tol:
             queue.append([sign, remaining, fill.price, comm_per_share])
 
     return pnls

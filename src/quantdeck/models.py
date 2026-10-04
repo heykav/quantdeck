@@ -6,6 +6,17 @@ from datetime import datetime
 from enum import Enum
 
 
+def qty_tolerance(*quantities: float) -> float:
+    """Float noise allowed when comparing share quantities.
+
+    Fractional sizes rarely sum exactly (``0.1 + 0.2 != 0.3``), and the
+    rounding residue grows with the size of the position, so the tolerance is
+    relative (1e-12 of the largest quantity involved) with an absolute floor
+    of 1e-9 shares.
+    """
+    return max(1e-9, 1e-12 * max((abs(q) for q in quantities), default=0.0))
+
+
 class OrderSide(str, Enum):
     BUY = "buy"
     SELL = "sell"

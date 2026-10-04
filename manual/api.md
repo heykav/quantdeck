@@ -122,7 +122,14 @@ Fill rules (all market orders):
 * A buy that the cash balance cannot cover (notional + commission) is
   rejected, not partially filled.
 * Unless ``allow_short`` is set, a sell larger than the current position
-  is rejected, so a strategy cannot accidentally go short.
+  is rejected, so a strategy cannot accidentally go short. A sell that
+  exceeds the position only by float noise (see :func:`quantdeck.models.qty_tolerance`)
+  is filled for exactly the shares held instead.
+* A position left with only float-noise shares after a fill is set to
+  exactly zero, so ``position == 0`` checks in strategies work.
+* With ``allow_short`` there is no margin requirement or borrow cost: a
+  short sale credits the full proceeds to cash, and buying back is only
+  limited by the cash balance, like any other buy.
 
 Rejected orders are kept in :attr:`rejected` with a reason instead of
 disappearing silently. Orders still pending when the data ends never fill.
@@ -149,8 +156,20 @@ Source of historical OHLCV bars for a symbol.
 
 Loads OHLCV bars from a local CSV file.
 
-Expects columns: ``timestamp, open, high, low, close, volume``. This is the
-escape hatch for custom or offline data when ``YFinanceFeed`` isn't suitable.
+Expects columns: ``timestamp, open, high, low, close, volume`` (header
+names are matched case-insensitively and may have surrounding spaces;
+extra columns are ignored). Rows are sorted by timestamp. ``start`` and
+``end`` are inclusive, and a date-only ``end`` includes that whole day.
+Timezone-aware timestamps are supported; naive ``start``/``end`` are then
+read in the file's timezone.
+
+Problems in the file (missing columns, unparseable timestamps, blank or
+non-numeric values) raise :class:`CSVFormatError`, a ``ValueError``,
+naming the offending line. Price sanity (positive, ``low <= high``,
+strictly increasing timestamps) is checked by the engine.
+
+This is the escape hatch for custom or offline data when ``YFinanceFeed``
+isn't suitable.
 
 - **method** `get_bars(self, symbol: str, start: datetime.date | datetime.datetime | str, end: datetime.date | datetime.datetime | str, timeframe: str = '1d') -> list[quantdeck.models.Bar]`
 
@@ -161,7 +180,12 @@ escape hatch for custom or offline data when ``YFinanceFeed`` isn't suitable.
 Fetches real historical OHLCV data from Yahoo Finance.
 
 No API key or account required — this is what makes ``quantdeck backtest``
-work out of the box against real market data.
+work out of the box against real market data. Prices are split- and
+dividend-adjusted (``auto_adjust=True``).
+
+``start`` and ``end`` are inclusive, as in :class:`CSVDataFeed`: Yahoo's
+own ``end`` is exclusive, so one extra day is requested and the result is
+trimmed to the range.
 
 - **method** `get_bars(self, symbol: str, start: datetime.date | datetime.datetime | str, end: datetime.date | datetime.datetime | str, timeframe: str = '1d') -> list[quantdeck.models.Bar]`
 
@@ -193,6 +217,10 @@ downside deviation divides by all periods; CAGR uses
 ``(len(curve) - 1) / periods_per_year`` years; max drawdown is the largest
 peak-to-trough fall as a fraction of the peak.
 
+Short samples: CAGR annualizes whatever span it is given, so a few bars
+can produce extreme values; if the annualized figure exceeds the float
+range it is reported as ``inf`` rather than raising ``OverflowError``.
+
 Ruin: the first non-positive equity value ends the curve. It is treated as
 a total loss (equity 0, return -100%, CAGR -100%, drawdown 100%) and later
 points are ignored, since a wiped-out account cannot compound back.
@@ -207,7 +235,9 @@ trade's realized P&L, net of commission.
 Gross P&L is the fill-price difference times the matched quantity. Each
 fill's commission is spread over its shares pro rata, so a match is charged
 for the shares it actually covers on both the opening and closing fill.
-Positions still open at the end of the data produce no trade.
+Positions still open at the end of the data produce no trade. Quantity
+residues within :func:`quantdeck.models.qty_tolerance` are treated as
+zero, matching how the broker settles positions.
 
 ### `class Metrics(total_return_pct: float, cagr_pct: float, sharpe: float, sortino: float, calmar: float, volatility_pct: float, max_drawdown_pct: float, win_rate_pct: float, profit_factor: float, num_trades: int) -> None`
 

@@ -9,12 +9,14 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from quantdeck.data.base import DataFeed
-from quantdeck.data.csv_feed import CSVDataFeed
+from quantdeck.data.csv_feed import CSVDataFeed, CSVFormatError
 from quantdeck.engine import BacktestEngine
 from quantdeck.metrics import compute_metrics, compute_trade_pnls
+from quantdeck.report import create_report, fingerprint, validate_destination, write_report
 from quantdeck.storage import Storage
 from quantdeck.strategy import Strategy
 
@@ -93,8 +95,21 @@ def backtest(
     ),
     slippage_bps: float = typer.Option(5.0, "--slippage-bps", help="Slippage per fill, in bps."),
     commission: float = typer.Option(0.0, "--commission", help="Flat commission per fill."),
+    report: Path | None = typer.Option(None, "--report", help="Write a versioned JSON report."),
 ) -> None:
     """Run a backtest for STRATEGY_FILE on Yahoo Finance data, or on --csv data."""
+    protected = [strategy_file, Path(db)] + ([csv] if csv is not None else [])
+    strategy_info: dict[str, str] = {}
+    source_info: dict[str, str] = {"type": "yahoo"}
+    if report is not None:
+        try:
+            validate_destination(report, protected)
+            strategy_info = fingerprint(strategy_file)
+            if csv is not None:
+                source_info = {"type": "csv", **fingerprint(csv)}
+        except (OSError, ValueError) as exc:
+            console.print(f"[red]Report error:[/red] {escape(str(exc))}", highlight=False)
+            raise typer.Exit(code=1) from None
     strategy_cls = _load_strategy(strategy_file)
     strategy = strategy_cls()
 
@@ -120,7 +135,12 @@ def backtest(
     console.print(
         f"Running backtest: [bold]{strategy_cls.__name__}[/bold] on {symbol} ({start} → {end})"
     )
-    equity_curve = engine.run()
+    try:
+        equity_curve = engine.run()
+    except (CSVFormatError, FileNotFoundError) as exc:
+        # Bad input data is a user error: show the message, not a traceback.
+        console.print(f"[red]Error:[/red] {escape(str(exc))}", highlight=False, soft_wrap=True)
+        raise typer.Exit(code=1) from None
 
     values = [p.equity for p in equity_curve]
     trade_pnls = compute_trade_pnls(engine.fills)
@@ -141,6 +161,37 @@ def backtest(
     table.add_row("Number of Trades", str(metrics.num_trades))
     table.add_row("Ending Equity", f"${values[-1]:,.2f}")
     console.print(table)
+
+    if report is not None:
+        try:
+            # Refuse to label results with a hash if the input changed during execution.
+            if fingerprint(strategy_file) != strategy_info or (
+                csv is not None and {"type": "csv", **fingerprint(csv)} != source_info
+            ):
+                raise ValueError("An input file changed during the run; report was not written")
+            validate_destination(report, protected)
+            write_report(
+                create_report(
+                    engine,
+                    metrics,
+                    {
+                        "symbol": symbol,
+                        "start": start,
+                        "end": end,
+                        "cash": cash,
+                        "slippage_bps": slippage_bps,
+                        "commission": commission,
+                        "risk_free_rate": risk_free_rate,
+                    },
+                    {**strategy_info, "class_name": strategy_cls.__name__},
+                    source_info,
+                ),
+                report,
+            )
+        except (OSError, ValueError) as exc:
+            console.print(f"[red]Report error:[/red] {escape(str(exc))}", highlight=False)
+            raise typer.Exit(code=1) from None
+        console.print(f"[dim]Saved report to {report}[/dim]")
 
     run_id = f"{strategy_cls.__name__}-{symbol}-{uuid.uuid4().hex[:8]}"
     storage = Storage(db)
