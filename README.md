@@ -1,6 +1,15 @@
+<p align="center">
+  <a href="https://heykav.github.io/quantdeck/"><picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/hero-light.svg">
+    <img src="docs/assets/hero.svg" alt="QuantDeck: a terminal window with a real equity curve from a bundled-data AAPL SMA 10/30 backtest" width="900">
+  </picture></a>
+</p>
+
 # QuantDeck
 
-A simple, event-driven backtesting framework for algorithmic trading strategies — zero-config, real market data out of the box, no database server required.
+A simple, event-driven backtesting framework for algorithmic trading strategies. Zero-config, real market data out of the box, no database server required.
+
+*The hero above is real engine output (AAPL, SMA 10/30, bundled 2015-2024 prices). It is a past simulation, not a prediction or financial advice.*
 
 <p>
   <a href="https://heykav.github.io/quantdeck/"><img src="https://img.shields.io/badge/Open%20the%20live%20web%20demo-QuantDeck-3AA0FF?style=for-the-badge&labelColor=0d0e12" alt="Open the live QuantDeck web demo"></a>
@@ -215,6 +224,15 @@ Want a slightly more advanced example? Look at [`examples/sma_crossover.py`](exa
 
 ## How it works under the hood
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/how-it-works-light.svg">
+    <img src="docs/assets/how-it-works.svg" alt="Strategy, BacktestEngine, DataFeed, PaperBroker and Metrics, wired bar by bar" width="900">
+  </picture>
+</p>
+
+The same flow as text:
+
 ```
 Strategy (your code)
     │  on_bar(bar) → buy()/sell()
@@ -274,6 +292,7 @@ Terms you'll see throughout this project:
 pip install -e ".[dev]"
 pytest          # run the test suite
 ruff check .    # run the linter
+python3 scripts/render_assets.py   # regenerate the hero, diagram and social preview from a real engine run
 ```
 
 ---
