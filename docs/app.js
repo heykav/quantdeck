@@ -1,7 +1,8 @@
-const ACCENT = "#3aa0ff", MUTED = "#9a9cac", BORDER = "#2a2c34", TEXT = "#F4F5F2", GREEN = "#3ddc84", RED = "#ff5c5c";
+const LIGHT = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
+const ACCENT = LIGHT ? "#00A84A" : "#00FF66", MUTED = LIGHT ? "#54564f" : "#9a9c96", BORDER = LIGHT ? "#c4c7c0" : "#2a2c29", TEXT = LIGHT ? "#111211" : "#F4F5F2", GREEN = ACCENT, RED = LIGHT ? "#c62828" : "#ff5c5c";
 Chart.defaults.color = MUTED;
 Chart.defaults.borderColor = BORDER;
-Chart.defaults.font.family = "-apple-system, sans-serif";
+Chart.defaults.font.family = "ui-monospace, Menlo, Consolas, monospace";
 
 const SRC_FILES = [
   "quantdeck/__init__.py",

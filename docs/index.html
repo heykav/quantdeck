@@ -15,7 +15,7 @@
 <meta property="og:description" content="A simple, event-driven backtesting framework for algorithmic trading, running client-side via Pyodide — no server, no API key, real historical data." />
 <meta property="og:image" content="https://heykav.github.io/quantdeck/og-image.png" />
 <meta property="og:image:width" content="1280" />
-<meta property="og:image:height" content="800" />
+<meta property="og:image:height" content="630" />
 <meta property="og:site_name" content="QuantDeck" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="QuantDeck — event-driven backtesting, live in your browser" />
@@ -38,6 +38,11 @@
         crossorigin="anonymous"></script>
 </head>
 <body>
+
+<div class="hero"><picture>
+  <source media="(prefers-color-scheme: light)" srcset="assets/hero-light.svg">
+  <img src="assets/hero.svg" alt="QuantDeck: a terminal window with a real equity curve from a bundled-data AAPL SMA 10/30 backtest" width="1200" height="440">
+</picture></div>
 
 <header>
   <h1><span>QuantDeck</span> — live in your browser</h1>
@@ -101,6 +106,13 @@
     </div>
   </div>
 </div>
+
+<div class="how"><picture>
+  <source media="(prefers-color-scheme: light)" srcset="assets/how-it-works-light.svg">
+  <img src="assets/how-it-works.svg" alt="How QuantDeck works: strategy, engine, data feed, paper broker, metrics" width="1200" height="380" loading="lazy">
+</picture></div>
+
+<p class="disclaimer"><strong>Educational tool, not financial advice.</strong> Results come from a simulation on bundled historical prices (2015-2024). Backtested performance does not guarantee future results, and a simulation cannot capture every real-world cost and risk.</p>
 
 <footer>Made with ❤️ in India by Krishna Anubhav · <a href="https://github.com/heykav/quantdeck">heykav/quantdeck</a></footer>
 

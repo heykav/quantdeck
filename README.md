@@ -1,17 +1,20 @@
 # QuantDeck
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/banner-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="docs/img/banner-light.svg">
-  <img src="docs/img/banner-light.svg" alt="QuantDeck banner: a small event-driven backtesting framework. The background line is the real equity curve of the bundled SMA crossover example on synthetic data.">
-</picture>
+<p align="center">
+  <a href="https://heykav.github.io/quantdeck/"><picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/hero-light.svg">
+    <img src="docs/assets/hero.svg" alt="QuantDeck: a terminal window with a real equity curve from a bundled-data AAPL SMA 10/30 backtest" width="900">
+  </picture></a>
+</p>
+
+*The picture is real engine output (AAPL, SMA 10/30, bundled 2015-2024 prices, the same run the live demo does). It is a past simulation, not a prediction or financial advice.*
 
 A small, event-driven backtesting framework for single-symbol trading strategies. Write a `Strategy` class, replay it over OHLCV bars, get an equity curve, trade list and risk metrics. It runs offline on CSV files and needs no database server.
 
 <p>
-  <a href="https://heykav.github.io/quantdeck/"><img src="https://img.shields.io/badge/Open%20the%20live%20web%20demo-QuantDeck-3AA0FF?style=for-the-badge&labelColor=0d0e12" alt="Open the live QuantDeck web demo"></a>
+  <a href="https://heykav.github.io/quantdeck/"><img src="https://img.shields.io/badge/Open%20the%20live%20web%20demo-QuantDeck-00FF66?style=for-the-badge&labelColor=090A09" alt="Open the live QuantDeck web demo"></a>
   &nbsp;&nbsp;
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-161715?style=for-the-badge&labelColor=0d0e12" alt="View the MIT license"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-161715?style=for-the-badge&labelColor=090A09" alt="View the MIT license"></a>
 </p>
 
 ## Quickstart (offline, about a minute)
