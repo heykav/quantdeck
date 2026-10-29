@@ -1,0 +1,28 @@
+<svg width="1200" height="380" viewBox="0 0 1200 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d">
+<title id="t">How QuantDeck works</title>
+<desc id="d">Your strategy receives one bar at a time from the engine. The engine reads bars from a data feed. Orders go to a simulated paper broker that fills them at the next bar's open. Fills feed the metrics and SQLite storage.</desc>
+<defs>
+<pattern id="g" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#1a1b1a"/></pattern>
+<clipPath id="k"><rect width="1200" height="380" rx="14"/></clipPath>
+</defs>
+<style>@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+<g clip-path="url(#k)">
+<rect width="1200" height="380" fill="#111211"/>
+<rect y="40" width="1200" height="340" fill="#090A09"/><rect y="40" width="1200" height="340" fill="url(#g)"/>
+<rect x="0" y="0" width="1200" height="40" fill="#090A09"/><circle cx="24" cy="20" r="6" fill="#ff5f57"/><circle cx="44" cy="20" r="6" fill="#febc2e"/><circle cx="64" cy="20" r="6" fill="#28c840"/><text x="92" y="25" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="13" fill="#9a9c96">how-it-works</text><path d="M0 40 H1200" stroke="#2a2c29"/>
+<text x="40" y="84" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="13" letter-spacing="2.4" fill="#00FF66">ONE BAR AT A TIME</text>
+<rect x="40" y="120" width="230" height="90" rx="10" fill="#111211" stroke="#00FF66" stroke-width="1.6"/><text x="56" y="154" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="15" font-weight="700" fill="#F4F5F2">Strategy</text><text x="56" y="178" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="12" fill="#9a9c96">your code: on_bar(bar)</text>
+<rect x="335" y="120" width="230" height="90" rx="10" fill="#111211" stroke="#2a2c29" stroke-width="1"/><text x="351" y="154" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="15" font-weight="700" fill="#F4F5F2">BacktestEngine</text><text x="351" y="178" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="12" fill="#9a9c96">the loop, bar by bar</text>
+<rect x="630" y="120" width="230" height="90" rx="10" fill="#111211" stroke="#2a2c29" stroke-width="1"/><text x="646" y="154" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="15" font-weight="700" fill="#F4F5F2">PaperBroker</text><text x="646" y="178" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="12" fill="#9a9c96">fills, slippage, fees</text>
+<rect x="925" y="120" width="235" height="90" rx="10" fill="#111211" stroke="#2a2c29" stroke-width="1"/><text x="941" y="154" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="15" font-weight="700" fill="#F4F5F2">Metrics + SQLite</text><text x="941" y="178" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="12" fill="#9a9c96">return, Sharpe, drawdown</text>
+<path d="M270 165 L331 165" stroke="#9a9c96" stroke-width="1.6"/><path d="M324 160 L331 165 L324 170" fill="none" stroke="#9a9c96" stroke-width="1.6"/><path d="M565 165 L626 165" stroke="#9a9c96" stroke-width="1.6"/><path d="M619 160 L626 165 L619 170" fill="none" stroke="#9a9c96" stroke-width="1.6"/><path d="M860 165 L921 165" stroke="#9a9c96" stroke-width="1.6"/><path d="M914 160 L921 165 L914 170" fill="none" stroke="#9a9c96" stroke-width="1.6"/>
+<rect x="335" y="262" width="230" height="80" rx="10" fill="#111211" stroke="#2a2c29" stroke-width="1"/><text x="351" y="296" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="15" font-weight="700" fill="#F4F5F2">DataFeed</text><text x="351" y="320" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="12" fill="#9a9c96">yfinance or CSV</text>
+<path d="M450 262 L450 214" stroke="#9a9c96" stroke-width="1.6"/><path d="M443 209 L450 214 L443 219" fill="none" stroke="#9a9c96" stroke-width="1.6"/>
+<text x="40" y="250" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="12" fill="#9a9c96">buy() / sell() go back</text>
+<text x="40" y="268" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="12" fill="#9a9c96">to the engine as orders</text>
+<text x="630" y="250" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="12" fill="#B6FF2E">Orders fill at the NEXT bar's open,</text>
+<text x="630" y="268" font-family='ui-monospace,"SFMono-Regular","DM Mono","DejaVu Sans Mono",Menlo,Consolas,monospace' font-size="12" fill="#B6FF2E">so a strategy never trades on the future.</text>
+<circle cx="52" cy="165" r="5" fill="#B6FF2E"><animate attributeName="cx" values="52;1140" dur="6s" repeatCount="indefinite"/></circle>
+</g>
+<rect x=".5" y=".5" width="1199" height="379" rx="14" fill="none" stroke="#2a2c29"/>
+</svg>
