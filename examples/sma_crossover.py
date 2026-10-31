@@ -20,6 +20,7 @@ from quantdeck.strategy import Strategy
 class SmaCrossoverStrategy(Strategy):
     fast_window = 10
     slow_window = 30
+    fractional = False  # True for assets quoted in the tens of thousands, e.g. BTC
 
     def on_start(self) -> None:
         self._closes: deque[float] = deque(maxlen=self.slow_window)
@@ -38,7 +39,11 @@ class SmaCrossoverStrategy(Strategy):
             # Orders fill at the NEXT open plus slippage, which can exceed today's
             # close. Sizing with 100% of cash would get the order rejected, so keep
             # a 5% buffer.
-            qty = int(self.cash * 0.95 // bar.close)
+            qty = (
+                self.cash * 0.95 / bar.close
+                if self.fractional
+                else int(self.cash * 0.95 // bar.close)
+            )
             if qty > 0:
                 self.buy(qty)
         elif signal == -1 and self._prev_signal != -1 and self.position > 0:
