@@ -70,6 +70,23 @@ def _format_ratio(value: float) -> str:
 
 
 @app.command()
+def fetch(
+    symbol: str = typer.Argument(..., help="Binance spot pair, e.g. BTCUSDT."),
+    start: str = typer.Option(..., "--start", help="Start date, YYYY-MM-DD."),
+    end: str = typer.Option(..., "--end", help="End date, YYYY-MM-DD (inclusive)."),
+    out: Path = typer.Option(..., "--out", "-o", help="CSV file to write."),
+) -> None:
+    """Download real daily candles from Binance public data (no API key) into a CSV."""
+    from quantdeck.data.binance import download_csv  # network helper, imported lazily
+
+    try:
+        path = download_csv(symbol, start, end, out)
+    except (ValueError, OSError) as exc:
+        raise typer.BadParameter(f"Could not download {symbol}: {exc}") from exc
+    console.print(f"[green]Saved[/green] {symbol} daily candles to {path}")
+
+
+@app.command()
 def backtest(
     strategy_file: Path = typer.Argument(
         ..., help="Path to a .py file containing a Strategy subclass."
@@ -93,6 +110,11 @@ def backtest(
     ),
     slippage_bps: float = typer.Option(5.0, "--slippage-bps", help="Slippage per fill, in bps."),
     commission: float = typer.Option(0.0, "--commission", help="Flat commission per fill."),
+    periods_per_year: int = typer.Option(
+        252,
+        "--periods-per-year",
+        help="Bars per year for annualising metrics: 252 for stocks, 365 for crypto.",
+    ),
 ) -> None:
     """Run a backtest for STRATEGY_FILE on Yahoo Finance data, or on --csv data."""
     strategy_cls = _load_strategy(strategy_file)
@@ -124,7 +146,9 @@ def backtest(
 
     values = [p.equity for p in equity_curve]
     trade_pnls = compute_trade_pnls(engine.fills)
-    metrics = compute_metrics(values, trade_pnls, risk_free_rate=risk_free_rate)
+    metrics = compute_metrics(
+        values, trade_pnls, periods_per_year=periods_per_year, risk_free_rate=risk_free_rate
+    )
 
     table = Table(title="Backtest Results")
     table.add_column("Metric")

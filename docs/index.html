@@ -29,7 +29,7 @@
      real HTTP response header - and GitHub Pages doesn't let a static
      site add custom response headers, so that protection genuinely isn't
      available here rather than silently pretended at. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self' https://cdn.jsdelivr.net https://data-api.binance.vision; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'" />
 <link rel="stylesheet" href="styles.css" />
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"
         crossorigin="anonymous"></script>
@@ -67,8 +67,11 @@
       <option value="TSLA">TSLA — Tesla</option>
       <option value="NVDA">NVDA — Nvidia</option>
       <option value="SPY">SPY — S&amp;P 500 ETF</option>
+      <option value="BTCUSDT_LIVE">BTCUSDT — Bitcoin, live from Binance</option>
+      <option value="BTCUSDT">BTCUSDT — Bitcoin, saved snapshot</option>
     </select>
-    <div class="field-hint">Bundled daily prices, 2015–2024, so the demo works offline with no live data fetch.</div>
+    <div class="field-hint">Stocks: bundled daily prices, 2015–2024. Bitcoin: real daily candles from Binance's public data, fetched live in your browser (falls back to a dated snapshot).</div>
+    <div class="field-hint" id="datasource" role="status"></div>
 
     <label for="fastWindow">Fast SMA window (days)</label>
     <input id="fastWindow" type="number" value="10" step="1" min="1" max="200" required />
@@ -112,7 +115,7 @@
   <img src="assets/how-it-works.svg" alt="How QuantDeck works: strategy, engine, data feed, paper broker, metrics" width="1200" height="380" loading="lazy">
 </picture></div>
 
-<p class="disclaimer"><strong>Educational tool, not financial advice.</strong> Results come from a simulation on bundled historical prices (2015-2024). Backtested performance does not guarantee future results, and a simulation cannot capture every real-world cost and risk.</p>
+<p class="disclaimer"><strong>Educational tool, not financial advice.</strong> Results come from a simulation on real historical prices (stocks: bundled 2015-2024 snapshot; Bitcoin: Binance public data, live or a dated snapshot). Costs are modelled as slippage only. The buy-and-hold line is shown so you can see when the strategy does worse than doing nothing. Backtested performance does not guarantee future results, and a simulation cannot capture every real-world cost and risk.</p>
 
 <footer>Made with ❤️ in India by Krishna Anubhav · <a href="https://github.com/heykav/quantdeck">heykav/quantdeck</a></footer>
 
