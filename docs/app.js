@@ -36,6 +36,41 @@ let booted = false;
 let running = false;
 const csvCache = {};
 
+// Real data, two ways. "BTCUSDT_LIVE" asks Binance's public market-data host straight
+// from the browser (it allows cross-origin reads, needs no key) for the last ~5 years of
+// closed daily candles. If that fails (offline, blocked) it falls back to the committed
+// snapshot and says so. Crypto trades every day, so metrics use 365 periods per year,
+// and costs are 15 bps per fill (5 bps slippage + about 10 bps taker fee).
+const BINANCE = "https://data-api.binance.vision/api/v3/klines";
+const DAY_MS = 86400000;
+const CRYPTO = { symbol: "BTCUSDT", slippage: 15, periods: 365, fractional: true };
+const SNAPSHOT_NOTE = "Real data: Binance BTCUSDT daily, 2021-01-01 to 2025-12-31, snapshot retrieved 2026-10-29 (committed file, no network needed).";
+const STOCK_NOTE = "Bundled daily prices, 2015-2024, a static snapshot (no live fetch for stocks).";
+
+async function fetchBinanceCsv() {
+  const end = Math.floor(Date.now() / DAY_MS) * DAY_MS; // start of today UTC; today's candle is still open
+  let cursor = end - 1826 * DAY_MS;
+  const lines = ["timestamp,open,high,low,close,volume"];
+  let first = null, last = null;
+  while (cursor < end) {
+    const url = `${BINANCE}?symbol=BTCUSDT&interval=1d&startTime=${cursor}&endTime=${end - 1}&limit=1000`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error("Binance answered " + resp.status);
+    const page = await resp.json();
+    if (!page.length) break;
+    for (const k of page) {
+      const day = new Date(k[0]).toISOString().slice(0, 10);
+      first = first || day;
+      last = day;
+      lines.push([day, k[1], k[2], k[3], k[4], k[5]].join(","));
+    }
+    cursor = page[page.length - 1][0] + DAY_MS;
+    if (page.length < 1000) break;
+  }
+  if (lines.length < 100) throw new Error("too few candles returned");
+  return { csv: lines.join("\n") + "\n", label: `Real data, live from Binance BTCUSDT daily, ${first} to ${last}, fetched ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC in your browser.` };
+}
+
 function setStatus(msg, isError) {
   const el = document.getElementById("status");
   el.textContent = msg;
@@ -94,6 +129,12 @@ from web_glue import run_web_backtest
 `);
 
     booted = true;
+    const wanted = new URLSearchParams(location.search).get("symbol");
+    const select = document.getElementById("symbol");
+    if (new URLSearchParams(location.search).get("tab") === "trades") {
+      document.querySelector('.tabs button[data-tab="trades"]').click();
+    }
+    if (wanted && [...select.options].some((o) => o.value === wanted)) select.value = wanted;
     document.getElementById("run").disabled = false;
     document.getElementById("run").textContent = "Run backtest";
     setStatus("Ready.");
@@ -103,13 +144,30 @@ from web_glue import run_web_backtest
   }
 }
 
-async function getCsv(symbol) {
-  if (csvCache[symbol]) return csvCache[symbol];
-  const resp = await fetch("data/" + symbol + ".csv");
-  if (!resp.ok) throw new Error("failed to fetch data for " + symbol + " (" + resp.status + ")");
-  const text = await resp.text();
-  csvCache[symbol] = text;
-  return text;
+async function getBundled(file, label) {
+  if (!csvCache[file]) {
+    const resp = await fetch("data/" + file + ".csv");
+    if (!resp.ok) throw new Error("failed to fetch data for " + file + " (" + resp.status + ")");
+    csvCache[file] = await resp.text();
+  }
+  return { csv: csvCache[file], label };
+}
+
+// Returns { csv, label, symbol, opts } for the dropdown choice.
+async function getData(choice) {
+  if (choice === "BTCUSDT_LIVE") {
+    try {
+      if (!csvCache.live) csvCache.live = await fetchBinanceCsv();
+      return { ...csvCache.live, symbol: "BTCUSDT", opts: CRYPTO };
+    } catch (e) {
+      const snap = await getBundled("BTCUSDT", SNAPSHOT_NOTE);
+      return { ...snap, label: "Live fetch from Binance failed (" + e.message + "), showing the snapshot instead. " + SNAPSHOT_NOTE, symbol: "BTCUSDT", opts: CRYPTO };
+    }
+  }
+  if (choice === "BTCUSDT") {
+    return { ...(await getBundled("BTCUSDT", SNAPSHOT_NOTE)), symbol: "BTCUSDT", opts: CRYPTO };
+  }
+  return { ...(await getBundled(choice, STOCK_NOTE)), symbol: choice, opts: { slippage: 5, periods: 252, fractional: false } };
 }
 
 async function runBacktest() {
@@ -135,22 +193,23 @@ async function runBacktest() {
   setStatus("Running backtest…");
 
   try {
-    const csvText = await getCsv(symbol);
+    const data0 = await getData(symbol);
 
     // Yield one frame so "Running…" actually paints before the
     // synchronous Pyodide call blocks the thread.
     await new Promise(requestAnimationFrame);
 
     const fn = pyodide.globals.get("run_web_backtest");
-    const raw = fn(symbol, csvText, fastWindow, slowWindow, cash, riskFreeRate);
+    const raw = fn(data0.symbol, data0.csv, fastWindow, slowWindow, cash, riskFreeRate, data0.opts.slippage, data0.opts.periods, data0.opts.fractional);
     const data = JSON.parse(raw);
     if (data.error) {
       setStatus(data.error, true);
     } else {
       setStatus("Ready.");
-      renderEquity(data.dates, data.equity_curve);
+      document.getElementById("datasource").textContent = data0.label + " Costs: " + data0.opts.slippage + " bps per fill.";
+      renderEquity(data.dates, data.equity_curve, data.benchmark_curve);
       renderTrades(data.trades);
-      renderSummary(data.metrics);
+      renderSummary(data.metrics, data.benchmark);
     }
   } catch (e) {
     setStatus("Backtest error: " + e, true);
@@ -165,7 +224,7 @@ function destroyIfExists(key) {
   if (charts[key]) { charts[key].destroy(); }
 }
 
-function renderEquity(dates, curve) {
+function renderEquity(dates, curve, bench) {
   destroyIfExists("equity");
   const ctx = document.getElementById("chartEquity");
   charts.equity = new Chart(ctx, {
@@ -173,12 +232,17 @@ function renderEquity(dates, curve) {
     data: {
       labels: dates,
       datasets: [{
+        label: "SMA strategy",
         data: curve, borderColor: ACCENT, backgroundColor: "rgba(58,160,255,0.12)",
         fill: true, tension: 0.1, pointRadius: 0, borderWidth: 2,
+      }, {
+        label: "Buy and hold",
+        data: bench, borderColor: MUTED, borderDash: [6, 4],
+        fill: false, tension: 0.1, pointRadius: 0, borderWidth: 1.5,
       }],
     },
     options: {
-      plugins: { legend: { display: false }, title: { display: true, text: "Equity Curve", color: TEXT } },
+      plugins: { legend: { display: true, labels: { color: MUTED } }, title: { display: true, text: "Equity Curve", color: TEXT } },
       scales: {
         x: { title: { display: true, text: "Date" }, grid: { color: BORDER }, ticks: { maxTicksLimit: 10 } },
         y: { title: { display: true, text: "Account Value ($)" }, grid: { color: BORDER } },
@@ -192,7 +256,7 @@ function renderTrades(trades) {
   tbody.textContent = "";
   for (const t of trades) {
     const tr = document.createElement("tr");
-    const cells = [t.date, t.side.toUpperCase(), t.qty, "$" + t.price.toFixed(2)];
+    const cells = [t.date, t.side.toUpperCase(), Number(t.qty.toFixed(6)), "$" + t.price.toFixed(2)];
     cells.forEach((val, i) => {
       const td = document.createElement("td");
       td.textContent = val;
@@ -212,7 +276,7 @@ function renderTrades(trades) {
   }
 }
 
-function renderSummary(m) {
+function renderSummary(m, b) {
   const rows = [
     ["Total Return", m.total_return_pct.toFixed(2) + "%"],
     ["CAGR", m.cagr_pct.toFixed(2) + "%"],
@@ -225,6 +289,9 @@ function renderSummary(m) {
     ["Profit Factor", m.profit_factor],
     ["Number of Trades", m.num_trades],
     ["Ending Equity", "$" + m.ending_equity.toLocaleString(undefined, { maximumFractionDigits: 2 })],
+    ["Buy and hold: Total Return", b.total_return_pct.toFixed(2) + "%"],
+    ["Buy and hold: Max Drawdown", b.max_drawdown_pct.toFixed(2) + "%"],
+    ["Buy and hold: Ending Equity", "$" + b.ending_equity.toLocaleString(undefined, { maximumFractionDigits: 2 })],
   ];
   const tbody = document.querySelector("#summary tbody");
   tbody.textContent = "";

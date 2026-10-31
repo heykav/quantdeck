@@ -19,6 +19,7 @@ from quantdeck.data.base import DataFeed
 from quantdeck.engine import BacktestEngine
 from quantdeck.metrics import compute_metrics, compute_trade_pnls
 from quantdeck.models import Bar
+from quantdeck.strategy import Strategy
 
 
 class _StaticFeed(DataFeed):
@@ -27,6 +28,18 @@ class _StaticFeed(DataFeed):
 
     def get_bars(self, symbol, start, end, timeframe="1d"):
         return self._bars
+
+
+class _BuyAndHold(Strategy):
+    """Benchmark: buy once with 99% of cash on the first bar, never sell."""
+
+    def on_start(self):
+        self._done = False
+
+    def on_bar(self, bar):
+        if not self._done:
+            self._done = True
+            self.buy(self.cash * 0.99 / bar.close)
 
 
 def _parse_bars(symbol: str, csv_text: str) -> list[Bar]:
@@ -45,7 +58,17 @@ def _parse_bars(symbol: str, csv_text: str) -> list[Bar]:
     ]
 
 
-def run_web_backtest(symbol, csv_text, fast_window, slow_window, starting_cash, risk_free_rate=0.0):
+def run_web_backtest(
+    symbol,
+    csv_text,
+    fast_window,
+    slow_window,
+    starting_cash,
+    risk_free_rate=0.0,
+    slippage_bps=5.0,
+    periods_per_year=252,
+    fractional=False,
+):
     try:
         bars = _parse_bars(symbol, csv_text)
         if not bars:
@@ -54,6 +77,7 @@ def run_web_backtest(symbol, csv_text, fast_window, slow_window, starting_cash, 
         strategy = SmaCrossoverStrategy()
         strategy.fast_window = int(fast_window)
         strategy.slow_window = int(slow_window)
+        strategy.fractional = bool(fractional)
         if strategy.fast_window >= strategy.slow_window:
             return json.dumps({"error": "Fast window must be smaller than the slow window."})
 
@@ -64,19 +88,45 @@ def run_web_backtest(symbol, csv_text, fast_window, slow_window, starting_cash, 
             start=bars[0].timestamp,
             end=bars[-1].timestamp,
             starting_cash=float(starting_cash),
+            slippage_bps=float(slippage_bps),
         )
         equity_curve = engine.run()
+        bench = BacktestEngine(
+            strategy=_BuyAndHold(),
+            data_feed=_StaticFeed(bars),
+            symbol=symbol,
+            start=bars[0].timestamp,
+            end=bars[-1].timestamp,
+            starting_cash=float(starting_cash),
+            slippage_bps=float(slippage_bps),
+        )
+        bench_curve = bench.run()
     except Exception as e:  # noqa: BLE001 - surfaced to the UI as a message, not a crash
         return json.dumps({"error": str(e)})
 
     values = [p.equity for p in equity_curve]
     trade_pnls = compute_trade_pnls(engine.fills)
-    metrics = compute_metrics(values, trade_pnls, risk_free_rate=float(risk_free_rate))
+    bench_values = [p.equity for p in bench_curve]
+    ppy = int(periods_per_year)
+    metrics = compute_metrics(
+        values, trade_pnls, periods_per_year=ppy, risk_free_rate=float(risk_free_rate)
+    )
+    bench_metrics = compute_metrics(
+        bench_values, [], periods_per_year=ppy, risk_free_rate=float(risk_free_rate)
+    )
 
     return json.dumps(
         {
             "dates": [p.timestamp.strftime("%Y-%m-%d") for p in equity_curve],
             "equity_curve": values,
+            "benchmark_curve": bench_values,
+            "benchmark": {
+                "total_return_pct": bench_metrics.total_return_pct,
+                "cagr_pct": bench_metrics.cagr_pct,
+                "sharpe": bench_metrics.sharpe,
+                "max_drawdown_pct": bench_metrics.max_drawdown_pct,
+                "ending_equity": bench_values[-1],
+            },
             "trades": [
                 {
                     "date": f.timestamp.strftime("%Y-%m-%d"),
